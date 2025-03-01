@@ -10,7 +10,9 @@ main :: proc() {
 
     rl.SetTargetFPS(60)
 
-    game := GameState{}
+    game := create_game()
+    game_push_message(&game, "Welcome to Scalar!")
+    game_push_message(&game, "You may press ? to get a list of controls / help")
 
     for !rl.WindowShouldClose() {
         rl.BeginDrawing()
