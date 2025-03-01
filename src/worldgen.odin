@@ -77,8 +77,8 @@ astar :: proc(start: [2]int, end: [2]int,
             break
         }
 
-        for dx := -1; dx < 1; dx += 1 {
-            for dy := -1; dy < 1; dy += 1 {
+        for dx := -1; dx <= 1; dx += 1 {
+            for dy := -1; dy <= 1; dy += 1 {
                 if abs(dx) + abs(dy) == 0 do continue
                 if !search_diagonals && (abs(dx) + abs(dy) != 1) do continue
                 next := cur.p + [2]int{dx, dy}
@@ -158,6 +158,41 @@ WallMap :: struct {
     width: int
 }
 
+// Grows the given wall outline by applying the kernel
+//      [x][x][x]
+// 1 if [x][0][x]  0 otherwise
+//      [x][x][x]
+// (if any of the x is 1, then we return 1)
+grow_wall :: proc(wall: []bool, width: int) -> [dynamic]bool {
+    height := len(wall) / width
+    owall := make([dynamic]bool, width * height)
+
+    for y := 0; y < height; y += 1 {
+        for x := 0; x < width; x += 1 {
+            good := false
+
+            outer: for dy := -1; dy <= 1; dy += 1 {
+                cy := y + dy
+                if cy < 0 || cy >= height do continue
+                for dx := -1; dx <= 1; dx += 1 {
+                    cx := x + dx
+
+                    if cx < 0 || cx >= width do continue
+
+                    if wall[cy * width + cx] {
+                        good = true
+                        break outer
+                    }
+                }
+            }
+
+            owall[y * width + x] = good
+        }
+    }
+
+    return owall
+}
+
 // Shrinks the given wall outline by applying the kernel:
 //      [1][1][1]
 // 1 if [1][1][1]  0 otherwise
@@ -192,6 +227,22 @@ shrink_wall :: proc(wall: []bool, width: int) -> [dynamic]bool {
             }
 
             owall[y * width + x] = good
+        }
+    }
+
+    return owall
+}
+
+wall_xor :: proc(wall1, wall2: []bool, width: int) -> [dynamic]bool {
+    assert(len(wall1) == len(wall2))
+    height := len(wall1) / width
+
+    owall := make([dynamic]bool, width * height)
+
+    for yi:=0; yi < height; yi+=1 {
+        for xi:=0; xi < width; xi+=1 {
+            i := yi * width + xi
+            owall[i] = wall1[i] ~ wall2[i]
         }
     }
 
@@ -246,6 +297,7 @@ DungeonRoom :: struct {
     tl: [2]int, // top-left
     br: [2]int, // bottom-right
     center: [2]int,
+    cgroup: int,
 }
 
 DungeonCorridor :: struct {
@@ -262,6 +314,8 @@ dungeon_gen :: proc(wall: []bool, width: int, sets: DungeonSettings) ->
     swall := shrink_wall(wall, width)
     defer delete(swall)
     owall = slice.clone(wall)
+    frontier := wall_xor(swall[:], wall[:], width)
+    defer delete(frontier)
 
 
     height := len(wall) / width
@@ -318,7 +372,8 @@ dungeon_gen :: proc(wall: []bool, width: int, sets: DungeonSettings) ->
         room := DungeonRoom{
             tl = tl,
             br = br,
-            center = (tl + br) / 2
+            center = (tl + br) / 2,
+            cgroup = max(int) // (unconnected)
         }
         append(&rooms, room)
         for ty := tl.y; ty <= br.y; ty += 1 {
@@ -336,6 +391,7 @@ dungeon_gen :: proc(wall: []bool, width: int, sets: DungeonSettings) ->
         }
     }
 
+
     // We now run a corridor for random pairs of room until all of them
     // have been connected. We start with the full array:
     unconnected := make_dynamic_array_len([dynamic]int, len(rooms))
@@ -343,6 +399,12 @@ dungeon_gen :: proc(wall: []bool, width: int, sets: DungeonSettings) ->
         unconnected[i] = i
     }
 
+    // We expand the rooms so corridors leave perpendicular to them
+    // (To expand them, we must shrink the walls, as walls are carved into them)
+    expand_rooms := shrink_wall(owall, width)
+    defer delete(expand_rooms)
+
+    cgroup := 0
     for len(unconnected) > 0 {
         room1, room2 : int
         if len(unconnected) >= 2 {
@@ -369,9 +431,27 @@ dungeon_gen :: proc(wall: []bool, width: int, sets: DungeonSettings) ->
             unordered_remove(&unconnected, 0)
         }
 
-        astar_wall(rooms[room1].center, rooms[room2].center, owall, width, )
+        path := astar_wall(rooms[room1].center, rooms[room2].center,
+            expand_rooms[:], width, 0, 100, frontier[:])
+        assert(len(path) != 0, "Somehow, unreachable rooms were generated!")
+
+        if rooms[room1].cgroup == max(int) && rooms[room2].cgroup == max(int) {
+            rooms[room1].cgroup = cgroup
+            cgroup += 1
+        }
+
+        ngroup := min(rooms[room1].cgroup, rooms[room2].cgroup)
+        rooms[room1].cgroup = ngroup
+        rooms[room2].cgroup = ngroup
+
+        if(len(path) == 0) do continue
+        for step in path {
+            owall[step.y * width + step.x] = false
+        }
 
     }
+
+    // Now connect two pairs of rooms with different cgroup
 
     return
 
