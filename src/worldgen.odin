@@ -386,7 +386,7 @@ dungeon_gen :: proc(wall: []bool, width: int, sets: DungeonSettings) ->
         placed_rooms += 1
         log.info("placed room")
 
-        if placed_rooms > sets.num_rooms {
+        if placed_rooms >= sets.num_rooms {
             break
         }
     }
@@ -405,6 +405,32 @@ dungeon_gen :: proc(wall: []bool, width: int, sets: DungeonSettings) ->
     defer delete(expand_rooms)
 
     cgroup := 0
+
+    join_rooms :: proc(rooms: []DungeonRoom, owall: []bool,
+        expand_rooms: []bool, frontier: []bool, width: int,
+        room1, room2: int, cgroup: ^int) {
+
+        path := astar_wall(rooms[room1].center, rooms[room2].center,
+        expand_rooms, width, 0, 100, frontier)
+        assert(len(path) != 0, "Somehow, unreachable rooms were generated!")
+
+        if cgroup != nil {
+            if rooms[room1].cgroup == max(int) && rooms[room2].cgroup == max(int) {
+                rooms[room1].cgroup = cgroup^
+                cgroup^ += 1
+            }
+
+            ngroup := min(rooms[room1].cgroup, rooms[room2].cgroup)
+            rooms[room1].cgroup = ngroup
+            rooms[room2].cgroup = ngroup
+        }
+
+        for step in path {
+            owall[step.y * width + step.x] = false
+        }
+
+    }
+
     for len(unconnected) > 0 {
         room1, room2 : int
         if len(unconnected) >= 2 {
@@ -431,27 +457,44 @@ dungeon_gen :: proc(wall: []bool, width: int, sets: DungeonSettings) ->
             unordered_remove(&unconnected, 0)
         }
 
-        path := astar_wall(rooms[room1].center, rooms[room2].center,
-            expand_rooms[:], width, 0, 100, frontier[:])
-        assert(len(path) != 0, "Somehow, unreachable rooms were generated!")
 
-        if rooms[room1].cgroup == max(int) && rooms[room2].cgroup == max(int) {
-            rooms[room1].cgroup = cgroup
-            cgroup += 1
-        }
-
-        ngroup := min(rooms[room1].cgroup, rooms[room2].cgroup)
-        rooms[room1].cgroup = ngroup
-        rooms[room2].cgroup = ngroup
-
-        if(len(path) == 0) do continue
-        for step in path {
-            owall[step.y * width + step.x] = false
-        }
+        join_rooms(rooms[:], owall[:], expand_rooms[:], frontier[:], width, room1, room2, &cgroup)
 
     }
 
-    // Now connect two pairs of rooms with different cgroup
+    // Now connect two pairs of rooms with different cgroup, until
+    // no such groups can be found. This will usually complete very fast
+    cgroups_seen: map[int]int
+    for i:=0; i < len(rooms); i+=1 {
+        cgroups_seen[rooms[i].cgroup] = i
+    }
+
+    for len(cgroups_seen) >= 2 {
+        // The two groups will become the same, thus one may be removed
+        cgroup0, cgroup1, room0, room1: int
+        it := 0
+        for icgroup, iroom in cgroups_seen {
+            if it == 0 {
+                cgroup0 = icgroup
+                room0 = iroom
+            } else {
+                cgroup1 = icgroup
+                room1 = iroom
+            }
+            it += 1
+            if it == 2 do break
+        }
+
+        delete_key(&cgroups_seen, cgroup1)
+        for &room in rooms {
+            if room.cgroup == cgroup1 {
+                room.cgroup = cgroup0
+            }
+        }
+
+        join_rooms(rooms[:], owall[:], expand_rooms[:], frontier[:], width, room0, room1, nil)
+    }
+
 
     return
 

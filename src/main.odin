@@ -26,7 +26,7 @@ main :: proc() {
     dungeon, dungeon_elems := dungeon_gen(demo_wall[:], demo_wall_width, DungeonSettings{
         max_room_size = [2]int{6, 6},
         min_room_size = [2]int{3,3},
-        num_rooms = 10
+        num_rooms = 14
     })
 
     for !rl.WindowShouldClose() {
