@@ -1,8 +1,11 @@
 package src
 import rl "vendor:raylib"
 import "core:c"
+import "core:log"
 
 main :: proc() {
+    context.logger = log.create_console_logger()
+
     rl.SetConfigFlags(rl.ConfigFlags{
         rl.ConfigFlag.WINDOW_RESIZABLE
     })
@@ -17,21 +20,18 @@ main :: proc() {
 
     demo_wall, demo_wall_width := wall_from_image("res/demo.png")
     shrunk := shrink_wall(demo_wall[:], demo_wall_width)
+    dungeon, dungeon_elems := dungeon_gen(demo_wall[:], demo_wall_width, DungeonSettings{
+        max_room_size = [2]int{6, 6},
+        min_room_size = [2]int{3,3},
+        num_rooms = 10
+    })
 
     for !rl.WindowShouldClose() {
         rl.BeginDrawing()
         rl.ClearBackground(rl.BLACK)
 
-        for yi:=0; yi < len(demo_wall) / demo_wall_width; yi+=1 {
-            for xi:=0; xi < demo_wall_width; xi+=1 {
-                if demo_wall[yi*demo_wall_width + xi] {
-                    rl.DrawPixel(c.int(xi) + 50, c.int(yi) + 50, rl.WHITE)
-                }
-                if shrunk[yi * demo_wall_width + xi] {
-                    rl.DrawPixel(c.int(xi) + 50, c.int(yi) + 50, rl.RED)
-                }
-            }
-        }
+        preview_wall(demo_wall[:], demo_wall_width, [2]c.int{50, 50}, rl.WHITE)
+        preview_wall(dungeon[:], demo_wall_width, [2]c.int{50, 50}, rl.RED)
 
         ui_draw(&game)
         rl.EndDrawing()

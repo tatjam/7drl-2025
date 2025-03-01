@@ -2,12 +2,14 @@ package src
 
 import "core:container/priority_queue"
 import "core:slice"
-import "core:math/rand"
 import "core:math/linalg"
 import "core:math"
 import "core:image"
 import "core:image/png"
 import "core:bytes"
+import rl "vendor:raylib"
+import "core:c"
+import "core:log"
 
 taxicab_heuristic :: proc(pos: [2]int, end: [2]int, udata: rawptr) -> int {
     return abs(pos.x - end.x) + abs(pos.y - end.y)
@@ -35,7 +37,7 @@ path_reconstruct :: proc(came_from: map[[2]int][2]int, start: [2]int, end: [2]in
 // Takes the following functions:
 // traverse_cost(cur: [2]int, next: [2]int, udata) -> int
 //      Return how costly it's to traverse the tile from the given position
-//      Return MAX_INT for untraversable!
+//      Return max(int) for untraversable!
 // heuristic(pos: [2]int, end: [2]int, udata) -> int
 //      Return how good is pos with respect to end. This is usually distance
 // Returns the list of tiles visited on the path from start to end, including both
@@ -82,6 +84,8 @@ astar :: proc(start: [2]int, end: [2]int,
                 next := cur.p + [2]int{dx, dy}
 
                 delta_cost := traverse_cost(cur.p, next, udata)
+                if delta_cost == max(int) do continue
+
                 new_cost := cost_so_far[cur.p] + delta_cost
 
                 next_cost_so_far, next_explored := cost_so_far[next]
@@ -98,6 +102,48 @@ astar :: proc(start: [2]int, end: [2]int,
     }
 
     return path_reconstruct(come_from, start, end)
+}
+
+// Paths through wall with given wall and empty costs, but
+// includes an additional, optional (pass nil if unused)
+// frontier value, which is blocks that MAY NOT BE TRANSVERSED
+astar_wall :: proc(start, end: [2]int, wall: []bool, width: int,
+    wall_cost:=max(int), empty_cost:=0, frontier:[]bool=nil) -> [dynamic][2]int {
+
+    if frontier != nil do assert(len(frontier) == len(wall))
+
+    WallPair :: struct {
+        wall: []bool,
+        frontier: []bool,
+        width: int,
+        height: int,
+        wall_cost: int,
+        empty_cost: int
+    }
+    cost_func :: proc(cur, next: [2]int, wallptr: rawptr) -> int {
+        wall := (^WallPair)(wallptr)
+
+
+        if next.x < 0 || next.y < 0 || next.x > wall.width || next.y > wall.height {
+            return max(int)
+        }
+
+        if wall.frontier != nil && wall.frontier[next.y * wall.width + next.x] {
+            return max(int)
+        }
+
+        if wall.wall[next.y * wall.width + next.x] {
+            return wall.wall_cost
+        } else {
+            return wall.empty_cost
+        }
+    }
+    pair := WallPair{
+        wall=wall, width=width, height=len(wall) / width,
+        wall_cost=wall_cost, empty_cost=empty_cost, frontier=frontier
+    }
+
+    return astar(start, end, cost_func, &pair, false)
 }
 
 DungeonSettings :: struct {
@@ -181,65 +227,74 @@ wall_from_image :: proc(imagepath: string) -> (out: [dynamic]bool, width: int) {
     return
 }
 
+// FOR DEBUGGING ONLY
+preview_wall :: proc(wall: []bool, width: int, off: [2]c.int, tint: rl.Color) {
+    for yi:=0; yi < len(wall) / width; yi+=1 {
+        for xi:=0; xi < width; xi+=1 {
+            if wall[yi*width + xi] {
+                for sxi := -1; sxi <= 1; sxi += 1 {
+                    for syi := -1; syi <= 1; syi += 1 {
+                        rl.DrawPixel(c.int(xi * 3 + sxi) + off.x, c.int(yi * 3 + syi) + off.y, tint)
+                    }
+                }
+            }
+        }
+    }
+}
+
 DungeonRoom :: struct {
     tl: [2]int, // top-left
     br: [2]int, // bottom-right
+    center: [2]int,
 }
 
 DungeonCorridor :: struct {
 
 }
 
-DungeonElement :: union {
-    DungeonRoom,
-    DungeonCorridor,
-}
-
 // Generates a dungeon within any space in wall that's true. Spaces set to false
 // will remain false (i.e. it will only dig), and it will not break the "envelope"
 // of the given wall. All rooms will be connected
 // wall is assumed to be indexed y * width + x
-// Note that it modifies wall!
 dungeon_gen :: proc(wall: []bool, width: int, sets: DungeonSettings) ->
-    (owall: []bool, elems: [dynamic]DungeonElement) {
+    (owall: []bool, rooms: [dynamic]DungeonRoom) {
 
     swall := shrink_wall(wall, width)
     defer delete(swall)
     owall = slice.clone(wall)
-    defer delete(wall)
 
 
     height := len(wall) / width
 
 
     // Place non-intersecting rooms
-    MAX_ITER :: 1000
-    MAX_PLACE_ITER :: 50
+    MAX_ITER :: 100
+    MAX_PLACE_ITER :: 10
     placed_rooms := 0
     for it := 0; it < MAX_ITER; it += 1 {
         dim := [2]int{
-            int(math.round(rand.float32_range(f32(sets.min_room_size.x), f32(sets.max_room_size.x)))),
-            int(math.round(rand.float32_range(f32(sets.min_room_size.y), f32(sets.max_room_size.y))))
+            int(rl.GetRandomValue(c.int(sets.min_room_size.x), c.int(sets.max_room_size.x))),
+            int(rl.GetRandomValue(c.int(sets.min_room_size.y), c.int(sets.max_room_size.y))),
         }
 
         // Try to find an spot in which the room fits
         tl := [2]int{}
         br := [2]int{}
+        found := false
         place_loop: for sit := 0; sit < MAX_PLACE_ITER; sit += 1 {
             tl = [2]int {
-                int(math.round(rand.float32_range(0, f32(width)))),
-                int(math.round(rand.float32_range(0, f32(height)))),
+                int(rl.GetRandomValue(0, c.int(width))),
+                int(rl.GetRandomValue(0, c.int(height)))
             }
-            br = tl + br
+            br = tl + dim
 
             // Check that it doesn't intersect any other room element
-            for other_room in elems {
-                room, is_room := other_room.(DungeonRoom)
-                if !is_room do continue
-
-                // Overlap check
-                if room.tl.x <= br.x && room.br.x >= tl.x do continue place_loop
-                if room.tl.y <= br.y && room.br.y >= tl.y do continue place_loop
+            for room in rooms {
+                // Overlap check (with extension to prevent no walls)
+                if  (room.tl.x <= br.x + 1 && room.br.x >= tl.x - 1) &&
+                    (room.tl.y <= br.y + 1 && room.br.y >= tl.y - 1) {
+                    continue place_loop
+                }
             }
 
 
@@ -253,20 +308,69 @@ dungeon_gen :: proc(wall: []bool, width: int, sets: DungeonSettings) ->
             }
 
             // It's okay! It doesn't intersect anything
+            found = true
             break
         }
 
+        if !found do continue
+
         // It's okay! Place the room
-        placed_rooms += 1
         room := DungeonRoom{
             tl = tl,
-            br = br
+            br = br,
+            center = (tl + br) / 2
         }
-        append(&elems, room)
+        append(&rooms, room)
+        for ty := tl.y; ty <= br.y; ty += 1 {
+            for tx := tl.x; tx <= br.x; tx += 1 {
+                assert(tx >= 0 && ty >= 0 && tx < width && ty < height)
+                owall[ty * width + tx] = false
+            }
+        }
+
+        placed_rooms += 1
+        log.info("placed room")
 
         if placed_rooms > sets.num_rooms {
             break
         }
+    }
+
+    // We now run a corridor for random pairs of room until all of them
+    // have been connected. We start with the full array:
+    unconnected := make_dynamic_array_len([dynamic]int, len(rooms))
+    for i := 0; i < len(rooms); i+=1 {
+        unconnected[i] = i
+    }
+
+    for len(unconnected) > 0 {
+        room1, room2 : int
+        if len(unconnected) >= 2 {
+            // Connect a random pair of rooms
+            room1i := rl.GetRandomValue(0, c.int(len(unconnected) - 1))
+            room1 = unconnected[room1i]
+            unordered_remove(&unconnected, room1i)
+
+            room2i := rl.GetRandomValue(0, c.int(len(unconnected) - 1))
+            room2 = unconnected[room2i]
+            unordered_remove(&unconnected, room2i)
+
+        } else {
+            assert(len(unconnected) == 1)
+            // Connect remaining room to a random one
+            room1 = unconnected[0]
+            if room1 + 1 < len(rooms) {
+                room2 = room1 + 1
+            } else {
+                assert(room1 > 0)
+                room2 = room1 - 1
+            }
+
+            unordered_remove(&unconnected, 0)
+        }
+
+        astar_wall(rooms[room1].center, rooms[room2].center, owall, width, )
+
     }
 
     return
