@@ -63,6 +63,10 @@ actor_get_draw_pos :: proc(actor: Actor) -> [2]f32 {
     return linalg.to_f32(actor.pos) + actor.doffset + [2]f32{0.5, 0.5}
 }
 
+destroy_actor :: proc(actor: ^Actor) {
+    destroy_subscale_map(actor)
+}
+
 create_hero :: proc(game: ^GameState, pos: [2]int) -> (out: HeroActor) {
     out.in_game = game
     out.pos = pos
@@ -155,6 +159,14 @@ create_subscale_map :: proc(for_actor: ^Actor, fname: string, sets: DungeonSetti
     delete(actor_wall)
     return frontier
 
+}
+
+destroy_subscale_map :: proc(for_actor: ^Actor) {
+    fullscale, is_fullscale := &for_actor.scale_kind.(FullscaleActor)
+    if !is_fullscale do return
+
+    destroy_tilemap(&fullscale.subscale.tmap)
+    rl.UnloadRenderTexture(fullscale.subscale.tex)
 }
 
 draw_actor :: proc(actor: ^Actor) {

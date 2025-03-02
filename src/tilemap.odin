@@ -58,6 +58,9 @@ destroy_tilemap :: proc(tm: ^Tilemap) {
     delete(tm.meshing)
     delete(tm.walls)
     delete(tm.rooms)
+    delete(tm.tile_tint)
+    delete(tm.tile_to_tex)
+    delete(tm.tile_rot)
 }
 
 mesh_world_tilemap :: proc(tm: ^Tilemap, exclude: []bool = nil) {

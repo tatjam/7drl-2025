@@ -33,6 +33,10 @@ create_game :: proc() -> (out: GameState) {
 }
 
 destroy_game :: proc(game: ^GameState) {
+    destroy_actor(&game.hero)
+    for &monster in game.monsters {
+        destroy_actor(&monster)
+    }
     delete(game.statuslog)
     delete(game.monsters)
     destroy_assets(&game.assets)
