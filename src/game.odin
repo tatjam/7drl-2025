@@ -183,13 +183,13 @@ game_draw_subscale :: proc(game: ^GameState) {
 
     target := rl.Rectangle{
         subscale_screen.x, subscale_screen.y,
-        source.width * 2, source.height * 2}
+        source.width * 1, source.height * 1}
 
-    /*rl.DrawTexturePro(subs.tex.texture,
-        source, target, [2]f32{0, 0}, 0.0, rl.WHITE
-    )*/
-    rl.DrawTextureRec(subs.tex.texture,
-        source, [2]f32{subscale_screen.x, subscale_screen.y}, rl.WHITE)
+    rl.DrawTexturePro(subs.tex.texture,
+        source, target, [2]f32{source.width, source.height}, 180.0, rl.WHITE
+    )
+    /*rl.DrawTextureRec(subs.tex.texture,
+        source, [2]f32{subscale_screen.x, subscale_screen.y}, rl.WHITE)*/
 
     rl.EndScissorMode()
 }

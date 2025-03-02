@@ -65,5 +65,5 @@ ui_subscale_scissor :: proc() {
     wf := f32(rl.GetScreenWidth())
     hf := f32(rl.GetScreenHeight())
 
-    rl.BeginScissorMode(c.int(GAME_PANEL_W*wf), 0, c.int(wf - GAME_PANEL_W*wf), c.int(GAME_PANEL_H*hf))
+    rl.BeginScissorMode(c.int(GAME_PANEL_W*wf), 0, c.int(wf - GAME_PANEL_W*wf), c.int(SCALE_PANEL_H*hf))
 }

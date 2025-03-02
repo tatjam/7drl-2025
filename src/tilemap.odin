@@ -240,7 +240,7 @@ draw_world_tilemap :: proc(tm: Tilemap) {
 }
 
 // Renders to a texture. Only call once when generating the actor
-render_subscale_tilemap :: proc(tm: Tilemap) -> rl.RenderTexture2D {
+render_subscale_tilemap :: proc(tm: Tilemap, frontier: []bool) -> rl.RenderTexture2D {
     out := rl.LoadRenderTexture(
         c.int(tm.width * tm.tileset_size.x), c.int(tm.height * tm.tileset_size.y))
     rl.BeginTextureMode(out)
@@ -248,6 +248,7 @@ render_subscale_tilemap :: proc(tm: Tilemap) -> rl.RenderTexture2D {
 
     for y:=0; y < tm.height; y+=1 {
         for x:=0; x < tm.width; x+=1 {
+            if frontier[y * tm.width + x] do continue
             tpos := tm.tile_to_tex[y * tm.width + x]
             tile := rl.Rectangle{
                 f32(tpos.x * tm.tileset_size.x), f32(tpos.y * tm.tileset_size.y),

@@ -252,6 +252,23 @@ wall_xor :: proc(wall1, wall2: []bool, width: int) -> [dynamic]bool {
     return owall
 }
 
+wall_nand :: proc(wall1, wall2: []bool, width: int) -> [dynamic]bool {
+    assert(len(wall1) == len(wall2))
+    height := len(wall1) / width
+
+    owall := make([dynamic]bool, width * height)
+
+    for yi:=0; yi < height; yi+=1 {
+        for xi:=0; xi < width; xi+=1 {
+            i := yi * width + xi
+            owall[i] = !(wall1[i] && wall2[i])
+        }
+    }
+
+    return owall
+}
+
+
 MapTag :: struct {
     pos: [2]int,
     tag: [3]u8
@@ -332,7 +349,7 @@ dungeon_gen :: proc(wall: []bool, width: int, sets: DungeonSettings) ->
 
     gwall := grow_wall(wall, width)
     defer delete(gwall)
-    mapedge = wall_xor(gwall[:], wall[:], width)
+    mapedge = wall_nand(gwall[:], wall[:], width)
 
 
     height := len(wall) / width

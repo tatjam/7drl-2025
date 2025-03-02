@@ -74,13 +74,14 @@ create_hero :: proc(game: ^GameState, pos: [2]int) -> (out: HeroActor) {
     out.scale_kind = FullscaleActor{}
     fs := &out.scale_kind.(FullscaleActor)
 
-    create_subscale_map(&out, "res/agents/player_interior.png", DungeonSettings{
+    frontier := create_subscale_map(&out, "res/agents/player_interior.png", DungeonSettings{
         max_room_size = [2]int{6, 6},
         min_room_size = [2]int{3, 3},
         num_rooms = 16,
     })
 
-    fs.subscale.tex = render_subscale_tilemap(fs.subscale.tmap)
+    fs.subscale.tex = render_subscale_tilemap(fs.subscale.tmap, frontier[:])
+    delete(frontier)
 
     return
 }
@@ -116,7 +117,8 @@ take_turn_monster :: proc(actor: ^MonsterActor) -> Action {
     return no_action()
 }
 
-create_subscale_map :: proc(for_actor: ^Actor, fname: string, sets: DungeonSettings) {
+create_subscale_map :: proc(for_actor: ^Actor, fname: string, sets: DungeonSettings) ->
+    [dynamic]bool {
     fullscale, is_fullscale := &for_actor.scale_kind.(FullscaleActor)
     assert(is_fullscale)
 
@@ -126,7 +128,7 @@ create_subscale_map :: proc(for_actor: ^Actor, fname: string, sets: DungeonSetti
     fullscale.subscale.tmap = create_tilemap(dungeon, frontier[:], width, dungeon_rooms)
     tex := get_texture(&for_actor.in_game.assets, "res/smalltiles.png")
     fullscale.subscale.tmap.tileset = tex
-    fullscale.subscale.tmap.tileset_size = [2]int{int(tex.width) / 2, int(tex.height) / 1}
+    fullscale.subscale.tmap.tileset_size = [2]int{int(tex.width) / 2, int(tex.height) / 4}
     worldmap := &fullscale.subscale.tmap
     height := worldmap.height
 
@@ -139,19 +141,19 @@ create_subscale_map :: proc(for_actor: ^Actor, fname: string, sets: DungeonSetti
     for yi := 0; yi < height; yi+=1 {
         for xi:=0; xi < width; xi+=1 {
             i := yi*width+xi
-            tex := [2]int{0, 0}
+            tex := [2]int{0, int(rl.GetRandomValue(0, 3))}
             if dungeon[i] {
-                tex = [2]int{1, 0}
+                tex = [2]int{1, int(rl.GetRandomValue(0, 3))}
             }
             worldmap.tile_to_tex[i] = tex
-            worldmap.tile_rot[i] = rand.choice(orient[:])
+            worldmap.tile_rot[i] = orient[0]
             worldmap.tile_tint[i] = rl.WHITE
         }
     }
 
 
     delete(actor_wall)
-    delete(frontier)
+    return frontier
 
 }
 
