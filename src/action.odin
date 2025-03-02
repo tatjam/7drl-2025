@@ -81,7 +81,7 @@ move_action :: proc(actor: ^Actor, dir: Direction, steps: int) -> Action {
 }
 
 animate_move_action :: proc(action: Action, prog: f32) -> f32 {
-    MOVE_ANIM_TIME :: 0.25
+    MOVE_ANIM_TIME :: 0.15
     move := action.variant.(MoveAction)
     delta := linalg.to_f32(move.endpos - move.startpos)
 

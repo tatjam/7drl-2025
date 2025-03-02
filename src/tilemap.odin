@@ -25,17 +25,19 @@ MapEdge :: struct {
     shadow_present: bool,
 }
 
-WorldTilemap :: struct {
+Tilemap :: struct {
     walls: [dynamic]bool,
     width: int,
     height: int,
-    meshing: [dynamic]MapEdge,
     rooms: [dynamic]DungeonRoom,
+
+    // Only if this is a world tilemap
+    meshing: [dynamic]MapEdge,
 }
 
 // We take ownership of walls
-create_world_tilemap :: proc(walls: [dynamic]bool, exclude: []bool, width: int,
-    rooms: [dynamic]DungeonRoom) -> (out: WorldTilemap) {
+create_tilemap :: proc(walls: [dynamic]bool, exclude: []bool, width: int,
+    rooms: [dynamic]DungeonRoom) -> (out: Tilemap) {
 
     out.walls = walls
     out.width = width
@@ -45,7 +47,13 @@ create_world_tilemap :: proc(walls: [dynamic]bool, exclude: []bool, width: int,
     return out
 }
 
-mesh_world_tilemap :: proc(tm: ^WorldTilemap, exclude: []bool = nil) {
+destroy_tilemap :: proc(tm: ^Tilemap) {
+    delete(tm.meshing)
+    delete(tm.walls)
+    delete(tm.rooms)
+}
+
+mesh_world_tilemap :: proc(tm: ^Tilemap, exclude: []bool = nil) {
     if exclude != nil {
         assert(len(exclude) == len(tm.walls))
     }
@@ -100,7 +108,7 @@ mesh_world_tilemap :: proc(tm: ^WorldTilemap, exclude: []bool = nil) {
 }
 
 // Will understand raylib camera to early-cull edges
-tilemap_cast_shadows :: proc(tm: WorldTilemap, caster: [2]f32,
+world_tilemap_cast_shadows :: proc(tm: Tilemap, caster: [2]f32,
     screen: rl.Rectangle, cam: rl.Camera2D) {
     for &edge in tm.meshing {
         // The normal vector to the edge is defined as the 90º perpendicular
@@ -135,7 +143,7 @@ tilemap_cast_shadows :: proc(tm: WorldTilemap, caster: [2]f32,
 }
 
 // Should be fairly efficient
-tilemap_raycast :: proc(tm: WorldTilemap, start: [2]f32, end: [2]f32) -> (visible: bool) {
+tilemap_raycast :: proc(tm: Tilemap, start: [2]f32, end: [2]f32) -> (visible: bool) {
     visible = true
 
     // Raycasting algorithm, kind of similar to Wolfenstein 3D
@@ -207,12 +215,12 @@ tile_center :: proc(pos: [2]int) -> [2]f32 {
     return [2]f32{f32(pos.x) + 0.5, f32(pos.y) + 0.5}
 }
 
-tilemap_find_spawn_pos :: proc(tm: WorldTilemap) -> [2]int {
+tilemap_find_spawn_pos :: proc(tm: Tilemap) -> [2]int {
     room := rand.choice(tm.rooms[:])
     return room.center
 }
 
-draw_world_tilemap :: proc(tm: WorldTilemap) {
+draw_world_tilemap :: proc(tm: Tilemap) {
     for &edge in tm.meshing {
         rl.DrawLineEx(edge.start, edge.end, 0.1, rl.WHITE)
 

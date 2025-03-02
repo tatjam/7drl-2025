@@ -54,7 +54,7 @@ take_turn_hero :: proc(actor: ^HeroActor) -> Action {
     } else do return no_action()
 
 
-    if actor.dir == dir && !rl.IsKeyDown(.LEFT_SHIFT) {
+    if actor.dir == dir || rl.IsKeyDown(.LEFT_SHIFT) {
         return move_action(actor, dir, 1)
     } else {
         if dir == actor.dir do return no_action()

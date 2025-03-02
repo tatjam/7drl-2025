@@ -9,7 +9,7 @@ GameState :: struct {
     statuslog: [dynamic]cstring,
     lastmessage_t: f64,
 
-    worldmap: WorldTilemap,
+    worldmap: Tilemap,
 
     hero: HeroActor,
     turni: int,
@@ -24,6 +24,10 @@ create_game :: proc() -> (out: GameState) {
     out.anim_progress = -1.0
 
     return
+}
+
+destroy_game :: proc(game: ^GameState) {
+    delete(game.statuslog)
 }
 
 game_push_message :: proc(game: ^GameState, msg: cstring) {
@@ -80,7 +84,10 @@ game_update :: proc(game: ^GameState) {
                 // (User actions always animate)
                 break
             } else {
-                // AI actions
+                // AI actions (TODO)
+
+                // TURN IS DONE
+                free_all(context.temp_allocator)
                 game.turni = -1
             }
         }
@@ -100,7 +107,7 @@ game_draw :: proc(game: ^GameState) {
     rl.ClearBackground(rl.Color{30, 30, 30, 255})
     rl.BeginMode2D(cam)
 
-    tilemap_cast_shadows(game.worldmap, cam.target, game_screen, cam)
+    world_tilemap_cast_shadows(game.worldmap, cam.target, game_screen, cam)
 
     ui_game_scissor()
     draw_world_tilemap(game.worldmap)

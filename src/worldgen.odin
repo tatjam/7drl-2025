@@ -66,6 +66,8 @@ astar :: proc(start: [2]int, end: [2]int,
 
     // IntelliJ odin plugin reports an error on next line, it's not correct
     frontier := priority_queue.Priority_Queue(PointAndPriority){}
+    defer priority_queue.destroy(&frontier)
+
     priority_queue.init(&frontier, less, priority_queue.default_swap_proc(PointAndPriority))
 
     priority_queue.push(&frontier, PointAndPriority{start, 0})
@@ -399,6 +401,7 @@ dungeon_gen :: proc(wall: []bool, width: int, sets: DungeonSettings) ->
     // We now run a corridor for random pairs of room until all of them
     // have been connected. We start with the full array:
     unconnected := make_dynamic_array_len([dynamic]int, len(rooms))
+    defer delete(unconnected)
     for i := 0; i < len(rooms); i+=1 {
         unconnected[i] = i
     }
@@ -416,6 +419,8 @@ dungeon_gen :: proc(wall: []bool, width: int, sets: DungeonSettings) ->
 
         path := astar_wall(rooms[room1].center, rooms[room2].center,
         expand_rooms, width, 0, 100, frontier)
+        defer delete(path)
+
         assert(len(path) != 0, "Somehow, unreachable rooms were generated!")
 
         if cgroup != nil {
@@ -469,6 +474,7 @@ dungeon_gen :: proc(wall: []bool, width: int, sets: DungeonSettings) ->
     // Now connect two pairs of rooms with different cgroup, until
     // no such groups can be found. This will usually complete very fast
     cgroups_seen: map[int]int
+    defer delete(cgroups_seen)
     for i:=0; i < len(rooms); i+=1 {
         cgroups_seen[rooms[i].cgroup] = i
     }
