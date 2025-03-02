@@ -2,6 +2,7 @@ package src
 
 import rl "vendor:raylib"
 import "core:math/linalg"
+import "core:math/rand"
 
 Direction :: enum {
     NORTH,
@@ -14,15 +15,15 @@ Direction :: enum {
 // such a map
 SubscaleMap :: struct {
     tmap: Tilemap,
-
+    tex: rl.RenderTexture,
 }
 
 SubscaleActor :: struct {
-    subscale_of: ^Actor
+    subscale_of: int
 }
 
 FullscaleActor :: struct {
-    subscale: SubscaleMap
+    subscale: SubscaleMap,
 }
 
 Actor :: struct {
@@ -70,6 +71,17 @@ create_hero :: proc(game: ^GameState, pos: [2]int) -> (out: HeroActor) {
     out.sprite = get_texture(&game.assets, "res/agents/player.png")
     out.sprite_rect = rl.Rectangle{0, 0, f32(out.sprite.width), f32(out.sprite.height)}
 
+    out.scale_kind = FullscaleActor{}
+    fs := &out.scale_kind.(FullscaleActor)
+
+    create_subscale_map(&out, "res/agents/player_interior.png", DungeonSettings{
+        max_room_size = [2]int{6, 6},
+        min_room_size = [2]int{3, 3},
+        num_rooms = 16,
+    })
+
+    fs.subscale.tex = render_subscale_tilemap(fs.subscale.tmap)
+
     return
 }
 
@@ -105,14 +117,38 @@ take_turn_monster :: proc(actor: ^MonsterActor) -> Action {
 }
 
 create_subscale_map :: proc(for_actor: ^Actor, fname: string, sets: DungeonSettings) {
-    fullscale, is_fullscale := for_actor.scale_kind.(FullscaleActor)
+    fullscale, is_fullscale := &for_actor.scale_kind.(FullscaleActor)
     assert(is_fullscale)
+
 
     actor_wall, width, tags := wall_from_image(fname)
     dungeon, dungeon_rooms, frontier := dungeon_gen(actor_wall[:], width, sets)
-    worldmap := create_tilemap(dungeon, frontier[:], width, dungeon_rooms)
-
     fullscale.subscale.tmap = create_tilemap(dungeon, frontier[:], width, dungeon_rooms)
+    tex := get_texture(&for_actor.in_game.assets, "res/smalltiles.png")
+    fullscale.subscale.tmap.tileset = tex
+    fullscale.subscale.tmap.tileset_size = [2]int{int(tex.width) / 2, int(tex.height) / 1}
+    worldmap := &fullscale.subscale.tmap
+    height := worldmap.height
+
+    resize(&worldmap.tile_to_tex, width*height)
+    resize(&worldmap.tile_rot, width*height)
+    resize(&worldmap.tile_tint, width*height)
+
+    orient := [4]f32{0.0, 90.0, 180.0, 270.0}
+    // For now, simple wall-floor mapping
+    for yi := 0; yi < height; yi+=1 {
+        for xi:=0; xi < width; xi+=1 {
+            i := yi*width+xi
+            tex := [2]int{0, 0}
+            if dungeon[i] {
+                tex = [2]int{1, 0}
+            }
+            worldmap.tile_to_tex[i] = tex
+            worldmap.tile_rot[i] = rand.choice(orient[:])
+            worldmap.tile_tint[i] = rl.WHITE
+        }
+    }
+
 
     delete(actor_wall)
     delete(frontier)

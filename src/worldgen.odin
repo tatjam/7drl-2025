@@ -10,6 +10,7 @@ import "core:bytes"
 import rl "vendor:raylib"
 import "core:c"
 import "core:log"
+import "core:math/rand"
 
 taxicab_heuristic :: proc(pos: [2]int, end: [2]int, udata: rawptr) -> int {
     return abs(pos.x - end.x) + abs(pos.y - end.y)

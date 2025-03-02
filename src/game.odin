@@ -17,8 +17,7 @@ GameState :: struct {
     monsters: [dynamic]MonsterActor,
     turni: int,
 
-    // if nil, we are not focusing any subscale
-    focus_subscale: ^Actor,
+    focus_subscale: int,
 
     cur_action: Maybe(Action),
     anim_progress: f32,
@@ -28,6 +27,7 @@ create_game :: proc() -> (out: GameState) {
     out.uifont = rl.LoadFont("res/fonts/setback.png")
     out.turni = -1
     out.anim_progress = -1.0
+    out.focus_subscale = -1
 
     return
 }
@@ -127,7 +127,7 @@ game_update :: proc(game: ^GameState) {
     }
 }
 
-game_draw :: proc(game: ^GameState) {
+game_draw_game :: proc(game: ^GameState) {
     cam: rl.Camera2D
     cam.zoom = 64.0
 
@@ -149,6 +149,54 @@ game_draw :: proc(game: ^GameState) {
 
     rl.EndScissorMode()
     rl.EndMode2D()
+
+}
+
+game_get_actor :: proc(game: ^GameState, actor_id: int) -> ^Actor {
+    if actor_id < 0 {
+        return &game.hero
+    } else {
+        return &game.monsters[actor_id]
+    }
+}
+
+game_draw_subscale :: proc(game: ^GameState) {
+    cam: rl.Camera2D
+    cam.zoom = 16.0
+
+    subscale_screen := rl.Rectangle{
+        GAME_PANEL_W * f32(rl.GetScreenWidth()), 0.0,
+        GAME_PANEL_W * (1.0 - f32(rl.GetScreenWidth())), GAME_PANEL_H * f32(rl.GetScreenHeight())}
+
+    subs := game_get_actor(game, game.focus_subscale).scale_kind.(FullscaleActor).subscale
+    stmap := subs.tmap
+    cam.target = [2]f32{f32(stmap.width) * 0.5, f32(stmap.height) * 0.5}
+    cam.offset = [2]f32{subscale_screen.width * 0.5, subscale_screen.height * 0.5}
+
+    ui_subscale_scissor()
+
+    // Draw the tilemap texture
+    source := rl.Rectangle{0, 0,
+        f32(subs.tmap.width * subs.tmap.tileset_size[0]),
+        f32(subs.tmap.height * subs.tmap.tileset_size[1])
+    }
+
+    target := rl.Rectangle{
+        subscale_screen.x, subscale_screen.y,
+        source.width * 2, source.height * 2}
+
+    /*rl.DrawTexturePro(subs.tex.texture,
+        source, target, [2]f32{0, 0}, 0.0, rl.WHITE
+    )*/
+    rl.DrawTextureRec(subs.tex.texture,
+        source, [2]f32{subscale_screen.x, subscale_screen.y}, rl.WHITE)
+
+    rl.EndScissorMode()
+}
+
+game_draw :: proc(game: ^GameState) {
+    game_draw_game(game)
+    game_draw_subscale(game)
 
     ui_draw(game)
 }
