@@ -40,17 +40,11 @@ main :: proc() {
     game_push_message(&game, "Welcome to Scalar!")
     game_push_message(&game, "You may press ? to get a list of controls / help")
 
-    demo_wall, demo_wall_width, demo_wall_tags := wall_from_image("res/demo.png")
-    delete(demo_wall_tags)
-
-    dungeon, dungeon_rooms, frontier := dungeon_gen(demo_wall[:], demo_wall_width, DungeonSettings{
+    game.worldmap = create_world(32, 32, DungeonSettings{
         max_room_size = [2]int{6, 6},
         min_room_size = [2]int{1,1},
         num_rooms = 14
     })
-    delete(demo_wall)
-    game.worldmap = create_tilemap(dungeon, frontier[:], demo_wall_width, dungeon_rooms)
-    delete(frontier)
     defer destroy_tilemap(&game.worldmap)
 
     startpos := tilemap_find_spawn_pos(game.worldmap)
@@ -63,6 +57,7 @@ main :: proc() {
         rl.BeginDrawing()
 
         game_draw(&game)
+        preview_wall(game.worldmap.walls[:], game.worldmap.width, [2]c.int{900, 512}, rl.RED)
 
         rl.EndDrawing()
     }

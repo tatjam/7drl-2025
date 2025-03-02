@@ -104,7 +104,18 @@ take_turn_monster :: proc(actor: ^MonsterActor) -> Action {
     return no_action()
 }
 
-create_subscale_map :: proc(for_actor: ^Actor, fname: string) {
+create_subscale_map :: proc(for_actor: ^Actor, fname: string, sets: DungeonSettings) {
+    fullscale, is_fullscale := for_actor.scale_kind.(FullscaleActor)
+    assert(is_fullscale)
+
+    actor_wall, width, tags := wall_from_image(fname)
+    dungeon, dungeon_rooms, frontier := dungeon_gen(actor_wall[:], width, sets)
+    worldmap := create_tilemap(dungeon, frontier[:], width, dungeon_rooms)
+
+    fullscale.subscale.tmap = create_tilemap(dungeon, frontier[:], width, dungeon_rooms)
+
+    delete(actor_wall)
+    delete(frontier)
 
 }
 

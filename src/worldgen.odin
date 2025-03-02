@@ -518,3 +518,19 @@ dungeon_gen :: proc(wall: []bool, width: int, sets: DungeonSettings) ->
     return
 
 }
+
+create_world :: proc(width, height: int, sets: DungeonSettings) -> Tilemap {
+    empty_wall := make_dynamic_array_len([dynamic]bool, width * height)
+    for yi := 0; yi < height; yi+=1 {
+        for xi:=0; xi < width; xi+=1 {
+            empty_wall[yi * width + xi] = true
+        }
+    }
+
+    dungeon, dungeon_rooms, frontier := dungeon_gen(empty_wall[:], width, sets)
+    delete(empty_wall)
+    worldmap := create_tilemap(dungeon, frontier[:], width, dungeon_rooms)
+    delete(frontier)
+
+    return worldmap
+}

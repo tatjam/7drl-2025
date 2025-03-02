@@ -1,6 +1,7 @@
 package src
 
 import rl "vendor:raylib"
+import "core:c"
 import "core:math/linalg"
 import "core:math/rand"
 import "core:math"
@@ -33,6 +34,12 @@ Tilemap :: struct {
 
     // Only if this is a world tilemap
     meshing: [dynamic]MapEdge,
+    // Only if this is a subscale tilemap
+    tileset: rl.Texture2D,
+    tileset_size: [2]int,
+    tile_to_tex: [dynamic][2]int,
+    tile_rot: [dynamic]f32,
+    tile_tint: [dynamic]rl.Color,
 }
 
 // We take ownership of walls
@@ -232,4 +239,30 @@ draw_world_tilemap :: proc(tm: Tilemap) {
     }
 }
 
+// Renders to a texture. Only call once when generating the actor
+render_subscale_tilemap :: proc(tm: Tilemap) -> rl.RenderTexture2D {
+    out := rl.LoadRenderTexture(
+        c.int(tm.width * tm.tileset_size.x), c.int(tm.height * tm.tileset_size.y))
+    rl.BeginTextureMode(out)
 
+    for y:=0; y < tm.height; y+=1 {
+        for x:=0; x < tm.width; x+=1 {
+            tpos := tm.tile_to_tex[y * tm.width + x]
+            tile := rl.Rectangle{
+                f32(tpos.x), f32(tpos.y),
+                f32(tm.tileset_size.x), f32(tm.tileset_size.y)}
+            target := rl.Rectangle{
+                f32(x * tm.tileset_size.x), f32(y * tm.tileset_size.y),
+                f32(tm.tileset_size.x), f32(tm.tileset_size.y)}
+            origin := [2]f32{
+                f32(tm.tileset_size.x) * 0.5, f32(tm.tileset_size.y) * 0.5,
+            }
+
+            rl.DrawTexturePro(tm.tileset, tile, target, origin,
+                tm.tile_rot[y*tm.width + x], tm.tile_tint[y*tm.width + x])
+        }
+    }
+
+    rl.EndTextureMode()
+    return out
+}

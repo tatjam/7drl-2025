@@ -16,3 +16,10 @@ get_texture :: proc(assets: ^AssetManager, name: cstring) -> rl.Texture2D {
         return ntex
     }
 }
+
+destroy_assets :: proc(assets: ^AssetManager) {
+    for name, tex in assets.textures {
+        rl.UnloadTexture(tex)
+    }
+    delete(assets.textures)
+}

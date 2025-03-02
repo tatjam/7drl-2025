@@ -35,6 +35,7 @@ create_game :: proc() -> (out: GameState) {
 destroy_game :: proc(game: ^GameState) {
     delete(game.statuslog)
     delete(game.monsters)
+    destroy_assets(&game.assets)
 }
 
 game_push_message :: proc(game: ^GameState, msg: cstring) {
@@ -136,12 +137,13 @@ game_draw :: proc(game: ^GameState) {
     cam.target = actor_get_draw_pos(game.hero)
     cam.offset = [2]f32{game_screen.width * 0.5, game_screen.height * 0.5}
 
-    rl.ClearBackground(rl.Color{30, 30, 30, 255})
+    rl.ClearBackground(rl.Color{0, 0, 0, 255})
     rl.BeginMode2D(cam)
 
-    world_tilemap_cast_shadows(game.worldmap, cam.target, game_screen, cam)
 
     ui_game_scissor()
+    rl.ClearBackground(rl.Color{30, 30, 30, 255})
+    world_tilemap_cast_shadows(game.worldmap, cam.target, game_screen, cam)
     draw_actor(&game.hero)
     draw_world_tilemap(game.worldmap)
 
