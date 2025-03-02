@@ -5,6 +5,7 @@ import "core:log"
 
 GameState :: struct {
     uifont: rl.Font,
+    assets: AssetManager,
     // Last message pushed is last message shown.
     statuslog: [dynamic]cstring,
     lastmessage_t: f64,
@@ -12,7 +13,12 @@ GameState :: struct {
     worldmap: Tilemap,
 
     hero: HeroActor,
+    probe: ProbeActor,
+    monsters: [dynamic]MonsterActor,
     turni: int,
+
+    // if nil, we are not focusing any subscale
+    focus_subscale: ^Actor,
 
     cur_action: Maybe(Action),
     anim_progress: f32,
@@ -28,6 +34,7 @@ create_game :: proc() -> (out: GameState) {
 
 destroy_game :: proc(game: ^GameState) {
     delete(game.statuslog)
+    delete(game.monsters)
 }
 
 game_push_message :: proc(game: ^GameState, msg: cstring) {
@@ -37,24 +44,39 @@ game_push_message :: proc(game: ^GameState, msg: cstring) {
 
 // If it returns true, an animation must be carried out
 game_do_action :: proc(game: ^GameState, action: Action) -> bool {
-    can_see_any := false
-    for need_see in action.need_see {
-        if tilemap_raycast(game.worldmap,
-        tile_center(game.hero.pos), tile_center(need_see)) == false {
-            can_see_any = true
-            break
+    subscale, is_subscale := action.by_actor.scale_kind.(SubscaleActor)
+    if !is_subscale {
+        can_see_any := false
+        for need_see in action.need_see {
+            if tilemap_raycast(game.worldmap,
+            tile_center(game.hero.pos), tile_center(need_see)) == false {
+                can_see_any = true
+                break
+            }
+        }
+
+        if can_see_any {
+            game.anim_progress = 0.0
+            game.cur_action = action
+            return true
+        } else {
+            // Carry out the action instantly
+            game.anim_progress = -1.0
+            act_action(action)
+            return false
         }
     }
-
-    if can_see_any {
-        game.anim_progress = 0.0
-        game.cur_action = action
-        return true
-    } else {
-        // Carry out the action instantly
-        game.anim_progress = -1.0
-        act_action(action)
-        return false
+    else {
+        // Within a subscale actor, all actions are visible
+        if game.focus_subscale != subscale.subscale_of {
+            game.anim_progress = -1.0
+            act_action(action)
+            return false
+        } else {
+            game.anim_progress = 0.0
+            game.cur_action = action
+            return true
+        }
     }
 }
 
@@ -68,7 +90,6 @@ game_update :: proc(game: ^GameState) {
             // Carry out the action itself
             act_action(action)
             game.anim_progress = -1.0
-            log.info("Action complete")
         }
 
         game.anim_progress += rl.GetFrameTime()
@@ -85,10 +106,21 @@ game_update :: proc(game: ^GameState) {
                 break
             } else {
                 // AI actions (TODO)
+                if game.turni == len(game.monsters) {
+                    // TURN IS DONE
+                    free_all(context.temp_allocator)
+                    game.turni = -1
+                    break
+                } else {
+                    action := take_turn_monster(&game.monsters[game.turni])
+                    if game_do_action(game, action) {
+                        break
+                    } else {
+                        act_action(action)
+                    }
 
-                // TURN IS DONE
-                free_all(context.temp_allocator)
-                game.turni = -1
+                    game.turni += 1
+                }
             }
         }
     }
@@ -96,7 +128,7 @@ game_update :: proc(game: ^GameState) {
 
 game_draw :: proc(game: ^GameState) {
     cam: rl.Camera2D
-    cam.zoom = 50.0
+    cam.zoom = 64.0
 
     game_screen := rl.Rectangle{
         0.0, 0.0,
@@ -110,6 +142,7 @@ game_draw :: proc(game: ^GameState) {
     world_tilemap_cast_shadows(game.worldmap, cam.target, game_screen, cam)
 
     ui_game_scissor()
+    draw_actor(&game.hero)
     draw_world_tilemap(game.worldmap)
 
     rl.EndScissorMode()

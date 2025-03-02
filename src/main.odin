@@ -7,6 +7,7 @@ import "core:mem"
 import "core:fmt"
 
 main :: proc() {
+    // Initialize the tracking allocator
     when ODIN_DEBUG {
         track: mem.Tracking_Allocator
         mem.tracking_allocator_init(&track, context.allocator)
@@ -39,7 +40,8 @@ main :: proc() {
     game_push_message(&game, "Welcome to Scalar!")
     game_push_message(&game, "You may press ? to get a list of controls / help")
 
-    demo_wall, demo_wall_width := wall_from_image("res/demo.png")
+    demo_wall, demo_wall_width, demo_wall_tags := wall_from_image("res/demo.png")
+    delete(demo_wall_tags)
 
     dungeon, dungeon_rooms, frontier := dungeon_gen(demo_wall[:], demo_wall_width, DungeonSettings{
         max_room_size = [2]int{6, 6},

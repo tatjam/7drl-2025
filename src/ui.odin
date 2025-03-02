@@ -3,9 +3,14 @@ package src
 import rl "vendor:raylib"
 import c "core:c"
 
+GAME_PANEL_W :: 0.6
+GAME_PANEL_H :: 0.7
+SCALE_PANEL_H :: 0.7
+
 // The UI consits of the main panel, where the world can be seen,
-// a bottom panel of status messages and a right panel where the user
-// can access his inventory, health status, and so on...
+// a bottom panel of status messages and two right panel where the user
+// - can see the view of his scale probe (usually within itself)
+// - can see a player panel with some info
 
 statuspanel_draw :: proc(game: ^GameState, starth, endw: c.int) {
     h := rl.GetScreenHeight() - starth
@@ -31,11 +36,12 @@ statuspanel_draw :: proc(game: ^GameState, starth, endw: c.int) {
     rl.EndScissorMode()
 }
 
-GAME_PANEL_W :: 0.6
-GAME_PANEL_H :: 0.7
+scalepanel_draw :: proc(game: ^GameState, startw: c.int, endh: c.int) {
+    rl.DrawRectangleLines(startw, 0, rl.GetScreenWidth() - startw, endh, rl.WHITE)
+}
 
-userpanel_draw :: proc(game: ^GameState, startw: c.int) {
-    rl.DrawRectangleLines(startw, 0, rl.GetScreenWidth() - startw, rl.GetScreenHeight(), rl.WHITE)
+userpanel_draw :: proc(game: ^GameState, startw: c.int, starth: c.int) {
+    rl.DrawRectangleLines(startw, starth, rl.GetScreenWidth() - startw, rl.GetScreenHeight() - starth, rl.WHITE)
 
 }
 
@@ -43,7 +49,8 @@ ui_draw :: proc(game: ^GameState) {
     wf := f32(rl.GetScreenWidth())
     hf := f32(rl.GetScreenHeight())
 
-    userpanel_draw(game, c.int(GAME_PANEL_W * wf))
+    scalepanel_draw(game, c.int(GAME_PANEL_W * wf), c.int(SCALE_PANEL_H * hf))
+    userpanel_draw(game, c.int(GAME_PANEL_W * wf), c.int(SCALE_PANEL_H * hf))
     statuspanel_draw(game, c.int(GAME_PANEL_H * hf), c.int(GAME_PANEL_W * wf))
 }
 

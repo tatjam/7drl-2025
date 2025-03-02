@@ -251,7 +251,12 @@ wall_xor :: proc(wall1, wall2: []bool, width: int) -> [dynamic]bool {
     return owall
 }
 
-wall_from_image :: proc(imagepath: string) -> (out: [dynamic]bool, width: int) {
+MapTag :: struct {
+    pos: [2]int,
+    tag: [3]u8
+}
+
+wall_from_image :: proc(imagepath: string) -> (out: [dynamic]bool, width: int, tags: [dynamic]MapTag) {
     img, err := png.load_from_file(imagepath, image.Options{})
     assert(err == nil)
     defer png.destroy(img)
@@ -272,7 +277,12 @@ wall_from_image :: proc(imagepath: string) -> (out: [dynamic]bool, width: int) {
             for ci := 0; ci < img.channels; ci+=1 {
                 pix[ci] = pixels[(yi * img.width + xi) * img.channels + ci]
             }
-            is_wall := pix[0] != 0 || pix[1] != 0 || pix[2] != 0 || pix[3] != 0
+            is_wall := pix[0] == 255  && pix[1] == 255 && pix[2] == 255
+            is_empty := pix[0] == 0 && pix[1] == 0 && pix[2] == 0
+            if !is_wall && !is_empty {
+                // tag
+                append(&tags, MapTag{[2]int{xi, yi}, pix.xyz})
+            }
             out[yi * img.width + xi] = is_wall
         }
     }
@@ -390,7 +400,6 @@ dungeon_gen :: proc(wall: []bool, width: int, sets: DungeonSettings) ->
         }
 
         placed_rooms += 1
-        log.info("placed room")
 
         if placed_rooms >= sets.num_rooms {
             break

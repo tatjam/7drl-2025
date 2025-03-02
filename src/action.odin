@@ -90,6 +90,22 @@ animate_move_action :: proc(action: Action, prog: f32) -> f32 {
     return MOVE_ANIM_TIME
 }
 
+animate_turn_action :: proc(action: Action, prog: f32) -> f32 {
+    ROT_ANIM_TIME :: 0.1
+    rot := action.variant.(TurnAction)
+
+    rot_span := f32((int(rot.dir) - int(action.by_actor.dir)) % 4) * 90.0
+    if rot_span > 180.0 {
+        rot_span = -90.0
+    } else if rot_span < -180.0 {
+        rot_span = 90.0
+    }
+
+    action.by_actor.drotate = prog / ROT_ANIM_TIME * rot_span
+
+    return ROT_ANIM_TIME
+}
+
 act_move_action :: proc(action: Action) {
     move := action.variant.(MoveAction)
     action.by_actor.pos = move.endpos
@@ -99,6 +115,7 @@ act_move_action :: proc(action: Action) {
 act_turn_action :: proc(action: Action) {
     turn := action.variant.(TurnAction)
     action.by_actor.dir = turn.dir
+    action.by_actor.drotate = 0.0
 }
 
 // Return the time required to complete anim, 0 if it has no animation
@@ -107,7 +124,7 @@ animate_action :: proc(action: Action, prog: f32) -> f32 {
     case MoveAction:
         return animate_move_action(action, prog)
     case TurnAction:
-        return 0.0
+        return animate_turn_action(action, prog)
     case NoAction:
         assert(false)
         return 0.0
