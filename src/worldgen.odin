@@ -309,13 +309,17 @@ DungeonCorridor :: struct {
 // of the given wall. All rooms will be connected
 // wall is assumed to be indexed y * width + x
 dungeon_gen :: proc(wall: []bool, width: int, sets: DungeonSettings) ->
-    (owall: []bool, rooms: [dynamic]DungeonRoom) {
+    (owall: [dynamic]bool, rooms: [dynamic]DungeonRoom, mapedge: [dynamic]bool) {
 
     swall := shrink_wall(wall, width)
     defer delete(swall)
-    owall = slice.clone(wall)
+    owall = slice.clone_to_dynamic(wall)
     frontier := wall_xor(swall[:], wall[:], width)
     defer delete(frontier)
+
+    gwall := grow_wall(wall, width)
+    defer delete(gwall)
+    mapedge = wall_xor(gwall[:], wall[:], width)
 
 
     height := len(wall) / width
@@ -401,7 +405,7 @@ dungeon_gen :: proc(wall: []bool, width: int, sets: DungeonSettings) ->
 
     // We expand the rooms so corridors leave perpendicular to them
     // (To expand them, we must shrink the walls, as walls are carved into them)
-    expand_rooms := shrink_wall(owall, width)
+    expand_rooms := shrink_wall(owall[:], width)
     defer delete(expand_rooms)
 
     cgroup := 0

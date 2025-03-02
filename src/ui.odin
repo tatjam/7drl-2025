@@ -31,6 +31,9 @@ statuspanel_draw :: proc(game: ^GameState, starth, endw: c.int) {
     rl.EndScissorMode()
 }
 
+GAME_PANEL_W :: 0.6
+GAME_PANEL_H :: 0.7
+
 userpanel_draw :: proc(game: ^GameState, startw: c.int) {
     rl.DrawRectangleLines(startw, 0, rl.GetScreenWidth() - startw, rl.GetScreenHeight(), rl.WHITE)
 
@@ -40,8 +43,13 @@ ui_draw :: proc(game: ^GameState) {
     wf := f32(rl.GetScreenWidth())
     hf := f32(rl.GetScreenHeight())
 
-    userpanel_draw(game, c.int(0.6 * wf))
-    statuspanel_draw(game, c.int(0.7 * hf), c.int(0.6 * wf))
+    userpanel_draw(game, c.int(GAME_PANEL_W * wf))
+    statuspanel_draw(game, c.int(GAME_PANEL_H * hf), c.int(GAME_PANEL_W * wf))
+}
 
+ui_game_scissor :: proc() {
+    wf := f32(rl.GetScreenWidth())
+    hf := f32(rl.GetScreenHeight())
 
+    rl.BeginScissorMode(0, 0, c.int(GAME_PANEL_W*wf), c.int(GAME_PANEL_H*hf))
 }
