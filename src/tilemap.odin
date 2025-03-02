@@ -2,6 +2,8 @@ package src
 
 import rl "vendor:raylib"
 import "core:math/linalg"
+import "core:math/rand"
+import "core:math"
 
 // A tilemap is where the gameplay takes places. It's a
 // rectangular grid of tiles which may contain entities
@@ -28,13 +30,17 @@ WorldTilemap :: struct {
     width: int,
     height: int,
     meshing: [dynamic]MapEdge,
+    rooms: [dynamic]DungeonRoom,
 }
 
 // We take ownership of walls
-create_world_tilemap :: proc(walls: [dynamic]bool, exclude: []bool, width: int) -> (out: WorldTilemap) {
+create_world_tilemap :: proc(walls: [dynamic]bool, exclude: []bool, width: int,
+    rooms: [dynamic]DungeonRoom) -> (out: WorldTilemap) {
+
     out.walls = walls
     out.width = width
     out.height = len(walls) / width
+    out.rooms = rooms
     mesh_world_tilemap(&out, exclude)
     return out
 }
@@ -126,6 +132,84 @@ tilemap_cast_shadows :: proc(tm: WorldTilemap, caster: [2]f32,
             edge.shadow_present = false
         }
     }
+}
+
+// Should be fairly efficient
+tilemap_raycast :: proc(tm: WorldTilemap, start: [2]f32, end: [2]f32) -> (visible: bool) {
+    visible = true
+
+    // Raycasting algorithm, kind of similar to Wolfenstein 3D
+    // where we just evaluate at the edges of the tiles along
+    // the line from start to end
+    dir := linalg.normalize(end - start)
+
+    // If we move along the line, every how much distance do we intersect
+    // an x = constant line
+    delta_x := 1e30 if dir.x == 0 else abs(1.0 / dir.x)
+    // Same as before but for y = constant line
+    delta_y := 1e30 if dir.y == 0 else abs(1.0 / dir.y)
+
+    // How much distance to first x = constant line, and to first y = constant line
+    cell := linalg.to_int(linalg.floor(start))
+    endcell := linalg.to_int(linalg.floor(end))
+
+    if cell == endcell do return false
+
+    side_x : f32
+    side_y : f32
+    step_x := 0
+    step_y := 0
+    if dir.x < 0 {
+        step_x = -1
+        side_x = (start.x - f32(cell.x)) * delta_x
+    } else {
+        step_x = 1
+        side_x = (f32(cell.x) + 1 - start.x) * delta_x
+    }
+    if dir.y < 0 {
+        step_y = -1
+        side_y = (start.y - f32(cell.y)) * delta_y
+    } else {
+        step_y = 1
+        side_y = (f32(cell.y) + 1 - start.y) * delta_y
+    }
+
+    hit := false
+    for {
+        if cell == endcell {
+            break
+        }
+
+        if side_x < side_y {
+            side_x += delta_x
+            cell.x += step_x
+        } else {
+            side_y += delta_y
+            cell.y += step_y
+        }
+
+
+        if cell.y < 0 || cell.x < 0 || cell.y >= tm.height || cell.x >= tm.width {
+            hit = true
+            break
+        }
+
+        if tm.walls[cell.y * tm.width + cell.x] {
+            hit = true
+            break
+        }
+    }
+
+    return hit
+}
+
+tile_center :: proc(pos: [2]int) -> [2]f32 {
+    return [2]f32{f32(pos.x) + 0.5, f32(pos.y) + 0.5}
+}
+
+tilemap_find_spawn_pos :: proc(tm: WorldTilemap) -> [2]int {
+    room := rand.choice(tm.rooms[:])
+    return room.center
 }
 
 draw_world_tilemap :: proc(tm: WorldTilemap) {
