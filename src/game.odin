@@ -205,11 +205,15 @@ game_get_actor :: proc(game: ^GameState, actor_id: int) -> ^Actor {
 
 game_draw_subscale :: proc(game: ^GameState) {
     cam: rl.Camera2D
-    cam.zoom = 16.0
+    if rl.GetScreenWidth() > 1366 && rl.GetScreenHeight() > 768 {
+        cam.zoom = 32.0
+    } else {
+        cam.zoom = 16.0
+    }
 
     subscale_screen := rl.Rectangle{
         GAME_PANEL_W * f32(rl.GetScreenWidth()), 0.0,
-        (1.0 - GAME_PANEL_W) * f32(rl.GetScreenWidth()), GAME_PANEL_H * f32(rl.GetScreenHeight())}
+        (1.0 - GAME_PANEL_W) * f32(rl.GetScreenWidth()), SCALE_PANEL_H * f32(rl.GetScreenHeight())}
 
     subs := game_get_actor(game, game.focus_subscale).scale_kind.(FullscaleActor).subscale
     stmap := subs.tmap

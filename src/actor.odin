@@ -72,7 +72,7 @@ MonsterActor :: struct {
 
 // Returns CENTER of the actor
 actor_get_draw_pos :: proc(actor: Actor) -> [2]f32 {
-    return linalg.to_f32(actor.pos) + actor.doffset + [2]f32{0.5, 0.5}
+    return linalg.to_f32(actor.pos) + actor.doffset + [2]f32{0.5 * f32(actor.sprite_size.x), 0.5 * f32(actor.sprite_size.y)}
 }
 
 destroy_actor :: proc(actor: ^Actor) {
@@ -153,11 +153,26 @@ take_turn_monster :: proc(actor: ^MonsterActor) -> Action {
     return no_action()
 }
 
+
+
 create_subscale_map :: proc(for_actor: ^Actor, fname: string, sets: DungeonSettings) ->
     [dynamic]bool {
     fullscale, is_fullscale := &for_actor.scale_kind.(FullscaleActor)
     assert(is_fullscale)
 
+    run_cable :: proc(inmap: ^Tilemap, frontier: []bool, from, to: [2]int) -> (out: SubscaleWire) {
+
+        return
+    }
+
+    clear_rectangle :: proc(inmap: ^Tilemap, center, rad: [2]int) {
+        for dx:=-rad.x;dx < rad.x;dx+=1 {
+            for dy:=-rad.y;dy<rad.y;dy+=1 {
+                p := center + [2]int{dx, dy}
+                inmap.walls[p.y * inmap.width + p.x] = false
+            }
+        }
+    }
 
     actor_wall, width, tags := wall_from_image(fname)
     dungeon, dungeon_rooms, frontier := dungeon_gen(actor_wall[:], width, sets)
@@ -172,9 +187,15 @@ create_subscale_map :: proc(for_actor: ^Actor, fname: string, sets: DungeonSetti
     game := for_actor.in_game
     cortex : int
     CORTEX_ID :: [3]u8{0, 0, 255}
+    MOTOR_ID :: [3]u8{255, 0, 0}
+
     for tag in tags {
         if tag.tag == CORTEX_ID {
             cortex = create_cortex(game, tag.pos, for_actor.id, 0)
+            clear_rectangle(&fullscale.subscale.tmap, tag.pos, [2]int{4,4})
+        } else if tag.tag == MOTOR_ID {
+            create_engine(game, tag.pos, for_actor.id, 0)
+            clear_rectangle(&fullscale.subscale.tmap, tag.pos, [2]int{4,3})
         }
     }
 
@@ -213,6 +234,7 @@ destroy_subscale_map :: proc(for_actor: ^Actor) {
 
 draw_actor :: proc(actor: ^Actor) {
     pos := actor_get_draw_pos(actor^)
+
     target_rect := rl.Rectangle{pos.x, pos.y, f32(actor.sprite_size.x), f32(actor.sprite_size.y)}
 
     rot : f32
@@ -228,10 +250,13 @@ draw_actor :: proc(actor: ^Actor) {
     }
     rl.DrawTexturePro(actor.sprite,
         actor.sprite_rect, target_rect,
-        [2]f32{0.5, 0.5},
+        [2]f32{0.5 * f32(actor.sprite_size.x), 0.5 * f32(actor.sprite_size.y)},
         rot + actor.drotate,
         rl.WHITE
         )
+
+    rl.DrawCircleV(linalg.to_f32(actor.pos)  + [2]f32{0.5, 0.5}, 0.1, rl.RED)
+    rl.DrawCircleV(linalg.to_f32(pos), 0.1, rl.BLUE)
 }
 
 create_cortex :: proc(game: ^GameState, pos: [2]int, inside: int, orient: c.int) -> (id: int) {
@@ -246,6 +271,26 @@ create_cortex :: proc(game: ^GameState, pos: [2]int, inside: int, orient: c.int)
         f32(orient * actor.sprite.height), 0,
         f32(actor.sprite.height), f32(actor.sprite.height)}
     actor.sprite_size = [2]int{3, 3}
+
+    actor.scale_kind = SubscaleActor{subscale_of = inside}
+
+    return
+}
+
+create_engine :: proc(game: ^GameState, pos: [2]int, inside: int, orient: c.int) -> (id: int) {
+    id = game_create_npc(game)
+    actor := &game.npcs[id]
+
+
+    actor.pos = pos
+    actor.dir = .NORTH
+    actor.alive = true
+    actor.sprite = get_texture(&game.assets, "res/agents/engine.png")
+    w := actor.sprite.width / 4
+    actor.sprite_rect = rl.Rectangle{
+        f32(orient * w), 0,
+        f32(w), f32(actor.sprite.height)}
+    actor.sprite_size = [2]int{3, 2}
 
     actor.scale_kind = SubscaleActor{subscale_of = inside}
 

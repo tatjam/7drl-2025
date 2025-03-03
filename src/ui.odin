@@ -3,9 +3,9 @@ package src
 import rl "vendor:raylib"
 import c "core:c"
 
-GAME_PANEL_W :: 0.6
+GAME_PANEL_W :: 0.56
 GAME_PANEL_H :: 0.7
-SCALE_PANEL_H :: 0.7
+SCALE_PANEL_H :: 0.95
 
 // The UI consits of the main panel, where the world can be seen,
 // a bottom panel of status messages and two right panel where the user
