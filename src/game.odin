@@ -14,13 +14,15 @@ GameState :: struct {
 
     hero: HeroActor,
     probe: ProbeActor,
-    monsters: [dynamic]MonsterActor,
+    npcs: [dynamic]MonsterActor,
     turni: int,
 
     focus_subscale: int,
 
     cur_action: Maybe(Action),
     anim_progress: f32,
+
+    show_help: bool,
 }
 
 create_game :: proc() -> (out: GameState) {
@@ -33,12 +35,13 @@ create_game :: proc() -> (out: GameState) {
 }
 
 destroy_game :: proc(game: ^GameState) {
+    destroy_actor(&game.probe)
     destroy_actor(&game.hero)
-    for &monster in game.monsters {
-        destroy_actor(&monster)
+    for &npc in game.npcs {
+        destroy_actor(&npc)
     }
     delete(game.statuslog)
-    delete(game.monsters)
+    delete(game.npcs)
     destroy_assets(&game.assets)
 }
 
@@ -49,6 +52,11 @@ game_push_message :: proc(game: ^GameState, msg: cstring) {
 
 // If it returns true, an animation must be carried out
 game_do_action :: proc(game: ^GameState, action: Action) -> bool {
+    _, is_none := action.variant.(NoAction)
+    if is_none {
+        return false
+    }
+
     subscale, is_subscale := action.by_actor.scale_kind.(SubscaleActor)
     if !is_subscale {
         can_see_any := false
@@ -85,48 +93,66 @@ game_do_action :: proc(game: ^GameState, action: Action) -> bool {
     }
 }
 
-game_update :: proc(game: ^GameState) {
-    if game.anim_progress >= 0 {
-        // Animate cur action
-        action, is_ok := game.cur_action.(Action)
-        assert(is_ok)
+game_update_anim :: proc(game: ^GameState) {
+    // Animate cur action
+    action, is_ok := game.cur_action.(Action)
+    assert(is_ok)
 
-        if game.anim_progress >= animate_action(action, game.anim_progress) {
-            // Carry out the action itself
-            act_action(action)
-            game.anim_progress = -1.0
-        }
+    if game.anim_progress >= animate_action(action, game.anim_progress) {
+        // Carry out the action itself
+        act_action(action)
+        game.anim_progress = -1.0
+    }
 
-        game.anim_progress += rl.GetFrameTime()
-    } else {
-        for {
-            if game.turni == -1 {
-                // Progress in turn
-                hero_action := take_turn_hero(&game.hero)
-                _, is_none := hero_action.variant.(NoAction)
-                if is_none do break // Continue processing user input
-                game.turni += 1
-                assert(game_do_action(game, hero_action))
-                // (User actions always animate)
+    game.anim_progress += rl.GetFrameTime()
+}
+
+game_update_turn :: proc(game: ^GameState) {
+    for {
+        if game.turni == -1 {
+            // Progress in turn
+            hero_action := take_turn_hero(&game.hero)
+            _, is_none := hero_action.variant.(NoAction)
+            if is_none do break // Continue processing user input
+            game.turni += 1
+            assert(game_do_action(game, hero_action))
+            // (User actions always animate)
+            break
+        } else {
+            // AI actions (TODO)
+            if game.turni == len(game.npcs) {
+                // TURN IS DONE
+                free_all(context.temp_allocator)
+                game.turni = -1
                 break
             } else {
-                // AI actions (TODO)
-                if game.turni == len(game.monsters) {
-                    // TURN IS DONE
-                    free_all(context.temp_allocator)
-                    game.turni = -1
+                action := take_turn_monster(&game.npcs[game.turni])
+                if game_do_action(game, action) {
                     break
                 } else {
-                    action := take_turn_monster(&game.monsters[game.turni])
-                    if game_do_action(game, action) {
-                        break
-                    } else {
-                        act_action(action)
-                    }
-
-                    game.turni += 1
+                    act_action(action)
                 }
+
+                game.turni += 1
             }
+        }
+    }
+}
+
+game_update :: proc(game: ^GameState) {
+    if game.show_help {
+        if rl.GetCharPressed() == '?' || rl.GetKeyPressed() == rl.KeyboardKey.ESCAPE {
+            game.show_help = false
+        }
+    } else {
+        if rl.GetCharPressed() == '?' {
+            game.show_help = true
+            return
+        }
+        if game.anim_progress >= 0 {
+            game_update_anim(game)
+        } else {
+            game_update_turn(game)
         }
     }
 }
@@ -156,11 +182,24 @@ game_draw_game :: proc(game: ^GameState) {
 
 }
 
+// You must customize game.npcs[returned_id] afterwards!
+game_create_npc :: proc(game: ^GameState) -> int {
+    id := len(game.npcs)
+
+    actor := MonsterActor{}
+    actor.id = id
+    actor.in_game = game
+    append(&game.npcs, actor)
+    return id
+}
+
 game_get_actor :: proc(game: ^GameState, actor_id: int) -> ^Actor {
-    if actor_id < 0 {
+    if actor_id == -2 {
+        return &game.probe
+    } else if actor_id == -1 {
         return &game.hero
     } else {
-        return &game.monsters[actor_id]
+        return &game.npcs[actor_id]
     }
 }
 
@@ -170,14 +209,17 @@ game_draw_subscale :: proc(game: ^GameState) {
 
     subscale_screen := rl.Rectangle{
         GAME_PANEL_W * f32(rl.GetScreenWidth()), 0.0,
-        GAME_PANEL_W * (1.0 - f32(rl.GetScreenWidth())), GAME_PANEL_H * f32(rl.GetScreenHeight())}
+        (1.0 - GAME_PANEL_W) * f32(rl.GetScreenWidth()), GAME_PANEL_H * f32(rl.GetScreenHeight())}
 
     subs := game_get_actor(game, game.focus_subscale).scale_kind.(FullscaleActor).subscale
     stmap := subs.tmap
     cam.target = [2]f32{f32(stmap.width) * 0.5, f32(stmap.height) * 0.5}
-    cam.offset = [2]f32{subscale_screen.width * 0.5, subscale_screen.height * 0.5}
+    cam.offset = [2]f32{
+        subscale_screen.x + subscale_screen.width * 0.5,
+        subscale_screen.height * 0.5}
 
     ui_subscale_scissor()
+    rl.BeginMode2D(cam)
 
     // Draw the tilemap texture
     source := rl.Rectangle{0, 0,
@@ -186,15 +228,26 @@ game_draw_subscale :: proc(game: ^GameState) {
     }
 
     target := rl.Rectangle{
-        subscale_screen.x, subscale_screen.y,
-        source.width * 1, source.height * 1}
+        f32(subs.tmap.width) * 0.5, f32(subs.tmap.height) * 0.5,
+        f32(stmap.width), f32(stmap.height)}
 
     rl.DrawTexturePro(subs.tex.texture,
-        source, target, [2]f32{source.width, source.height}, 180.0, rl.WHITE
+    source, target, [2]f32{f32(stmap.width) * 0.5, f32(stmap.height) * 0.5}, 180.0, rl.WHITE
     )
-    /*rl.DrawTextureRec(subs.tex.texture,
-        source, [2]f32{subscale_screen.x, subscale_screen.y}, rl.WHITE)*/
 
+    // Draw the actors
+    if game.probe.scale_kind.(SubscaleActor).subscale_of == game.focus_subscale {
+        draw_actor(&game.probe)
+    }
+
+    for &actor in game.npcs {
+        subscale, is_subscale := actor.scale_kind.(SubscaleActor)
+        if is_subscale && subscale.subscale_of == game.focus_subscale {
+            draw_actor(&actor)
+        }
+    }
+
+    rl.EndMode2D()
     rl.EndScissorMode()
 }
 

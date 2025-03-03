@@ -3,6 +3,7 @@ package src
 import rl "vendor:raylib"
 import "core:math/linalg"
 import "core:math/rand"
+import "core:c"
 
 Direction :: enum {
     NORTH,
@@ -11,11 +12,20 @@ Direction :: enum {
     WEST
 }
 
+SubscaleWire :: struct {
+    start_actor: int,
+    end_actor: int,
+    steps: [dynamic][2]int,
+    // Progress along length of wire
+    charges: [dynamic]int,
+}
+
 // If we are not a subscale actor, we must have
 // such a map
 SubscaleMap :: struct {
     tmap: Tilemap,
     tex: rl.RenderTexture,
+    wire: [dynamic]SubscaleWire,
 }
 
 SubscaleActor :: struct {
@@ -27,6 +37,7 @@ FullscaleActor :: struct {
 }
 
 Actor :: struct {
+    id: int,
     alive: bool,
     pos: [2]int,
     // Offset while drawing, for animation
@@ -35,6 +46,7 @@ Actor :: struct {
 
     sprite: rl.Texture2D,
     sprite_rect: rl.Rectangle,
+    sprite_size: [2]int,
 
     dir: Direction,
     in_game: ^GameState,
@@ -68,12 +80,14 @@ destroy_actor :: proc(actor: ^Actor) {
 }
 
 create_hero :: proc(game: ^GameState, pos: [2]int) -> (out: HeroActor) {
+    out.id = -1
     out.in_game = game
     out.pos = pos
     out.dir = .NORTH
     out.alive = true
     out.sprite = get_texture(&game.assets, "res/agents/player.png")
     out.sprite_rect = rl.Rectangle{0, 0, f32(out.sprite.width), f32(out.sprite.height)}
+    out.sprite_size = [2]int{1, 1}
 
     out.scale_kind = FullscaleActor{}
     fs := &out.scale_kind.(FullscaleActor)
@@ -86,6 +100,24 @@ create_hero :: proc(game: ^GameState, pos: [2]int) -> (out: HeroActor) {
 
     fs.subscale.tex = render_subscale_tilemap(fs.subscale.tmap, frontier[:])
     delete(frontier)
+
+    return
+}
+
+create_probe :: proc(game: ^GameState, pos: [2]int) -> (out: ProbeActor) {
+    out.id = -2
+    out.in_game = game
+    out.pos = pos
+    out.dir = .NORTH
+    out.alive = true
+    out.sprite = get_texture(&game.assets, "res/agents/probe.png")
+    out.sprite_rect = rl.Rectangle{0, 0, f32(out.sprite.width), f32(out.sprite.height)}
+    out.sprite_size = [2]int{1, 1}
+
+    out.scale_kind = SubscaleActor{
+        subscale_of = -1
+    }
+    fs := &out.scale_kind.(SubscaleActor)
 
     return
 }
@@ -136,6 +168,16 @@ create_subscale_map :: proc(for_actor: ^Actor, fname: string, sets: DungeonSetti
     worldmap := &fullscale.subscale.tmap
     height := worldmap.height
 
+    // Run wires and build rooms for organs
+    game := for_actor.in_game
+    cortex : int
+    CORTEX_ID :: [3]u8{0, 0, 255}
+    for tag in tags {
+        if tag.tag == CORTEX_ID {
+            cortex = create_cortex(game, tag.pos, for_actor.id, 0)
+        }
+    }
+
     resize(&worldmap.tile_to_tex, width*height)
     resize(&worldmap.tile_rot, width*height)
     resize(&worldmap.tile_tint, width*height)
@@ -171,7 +213,8 @@ destroy_subscale_map :: proc(for_actor: ^Actor) {
 
 draw_actor :: proc(actor: ^Actor) {
     pos := actor_get_draw_pos(actor^)
-    target_rect := rl.Rectangle{pos.x, pos.y, 1.0, 1.0}
+    target_rect := rl.Rectangle{pos.x, pos.y, f32(actor.sprite_size.x), f32(actor.sprite_size.y)}
+
     rot : f32
     switch actor.dir {
     case .NORTH:
@@ -191,3 +234,20 @@ draw_actor :: proc(actor: ^Actor) {
         )
 }
 
+create_cortex :: proc(game: ^GameState, pos: [2]int, inside: int, orient: c.int) -> (id: int) {
+    id = game_create_npc(game)
+    actor := &game.npcs[id]
+
+    actor.pos = pos
+    actor.dir = .NORTH
+    actor.alive = true
+    actor.sprite = get_texture(&game.assets, "res/agents/cortex.png")
+    actor.sprite_rect = rl.Rectangle{
+        f32(orient * actor.sprite.height), 0,
+        f32(actor.sprite.height), f32(actor.sprite.height)}
+    actor.sprite_size = [2]int{3, 3}
+
+    actor.scale_kind = SubscaleActor{subscale_of = inside}
+
+    return
+}

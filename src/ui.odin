@@ -41,8 +41,23 @@ scalepanel_draw :: proc(game: ^GameState, startw: c.int, endh: c.int) {
 }
 
 userpanel_draw :: proc(game: ^GameState, startw: c.int, starth: c.int) {
-    rl.DrawRectangleLines(startw, starth, rl.GetScreenWidth() - startw, rl.GetScreenHeight() - starth, rl.WHITE)
+    rl.DrawRectangleLines(startw, starth,
+        rl.GetScreenWidth() - startw, rl.GetScreenHeight() - starth, rl.WHITE)
 
+}
+
+helppanel_draw :: proc(game: ^GameState, marginw: c.int, marginh: c.int) {
+    if game.show_help {
+        rl.DrawRectangle(marginw, marginh,
+            rl.GetScreenWidth() - 2 * marginw,
+            rl.GetScreenHeight() - 2 * marginh,
+            rl.BLACK)
+        rl.DrawRectangleLines(marginw, marginh,
+            rl.GetScreenWidth() - 2 * marginw,
+            rl.GetScreenHeight() - 2 * marginh,
+            rl.WHITE)
+
+    }
 }
 
 ui_draw :: proc(game: ^GameState) {
@@ -52,6 +67,7 @@ ui_draw :: proc(game: ^GameState) {
     scalepanel_draw(game, c.int(GAME_PANEL_W * wf), c.int(SCALE_PANEL_H * hf))
     userpanel_draw(game, c.int(GAME_PANEL_W * wf), c.int(SCALE_PANEL_H * hf))
     statuspanel_draw(game, c.int(GAME_PANEL_H * hf), c.int(GAME_PANEL_W * wf))
+    helppanel_draw(game, c.int(0.2 * wf), c.int(0.2 * hf))
 }
 
 ui_game_scissor :: proc() {

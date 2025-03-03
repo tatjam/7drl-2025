@@ -301,7 +301,7 @@ wall_from_image :: proc(imagepath: string) -> (out: [dynamic]bool, width: int, t
                 // tag
                 append(&tags, MapTag{[2]int{xi, yi}, pix.xyz})
             }
-            out[yi * img.width + xi] = is_wall
+            out[yi * img.width + xi] = !is_empty
         }
     }
 

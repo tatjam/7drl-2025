@@ -30,6 +30,7 @@ main :: proc() {
         rl.ConfigFlag.WINDOW_RESIZABLE
     })
     rl.InitWindow(512, 512, "Guamedo")
+    rl.SetExitKey(rl.KeyboardKey.KEY_NULL)
     defer rl.CloseWindow()
 
     rl.SetTargetFPS(60)
@@ -49,7 +50,8 @@ main :: proc() {
 
     startpos := tilemap_find_spawn_pos(game.worldmap)
     game.hero = create_hero(&game, startpos)
-
+    probestartpos := tilemap_find_spawn_pos(game.hero.scale_kind.(FullscaleActor).subscale.tmap)
+    game.probe = create_probe(&game, probestartpos)
 
     for !rl.WindowShouldClose() {
         game_update(&game)
@@ -57,7 +59,7 @@ main :: proc() {
         rl.BeginDrawing()
 
         game_draw(&game)
-        preview_wall(game.worldmap.walls[:], game.worldmap.width, [2]c.int{900, 512}, rl.RED)
+        //preview_wall(game.worldmap.walls[:], game.worldmap.width, [2]c.int{900, 512}, rl.RED)
 
         rl.EndDrawing()
     }

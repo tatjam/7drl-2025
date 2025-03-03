@@ -140,7 +140,6 @@ act_action :: proc(action: Action) {
     case TurnAction:
         act_turn_action(action)
     case NoAction:
-        assert(false)
     case:
     }
 }
