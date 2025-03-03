@@ -70,9 +70,18 @@ MonsterActor :: struct {
     using base: Actor
 }
 
-// Returns CENTER of the actor
+// Returns CENTER of the actor. If the actor size is odd, this is clearly
+// defined to be a tile center, otherwise, it's offset to positive x / y
+// such that the center lies on a tile center
 actor_get_draw_pos :: proc(actor: Actor) -> [2]f32 {
-    return linalg.to_f32(actor.pos) + actor.doffset + [2]f32{0.5 * f32(actor.sprite_size.x), 0.5 * f32(actor.sprite_size.y)}
+    extra := [2]f32{0.0, 0.0}
+    if actor.sprite_size.x % 2 == 0 {
+        extra.x = -0.5
+    }
+    if actor.sprite_size.y % 2 == 0 {
+        extra.y = -0.5
+    }
+    return linalg.to_f32(actor.pos) + [2]f32{0.5, 0.5} + actor.doffset + extra
 }
 
 destroy_actor :: proc(actor: ^Actor) {
