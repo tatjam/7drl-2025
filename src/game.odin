@@ -227,12 +227,12 @@ game_draw_subscale :: proc(game: ^GameState) {
 
     // Draw the tilemap texture
     source := rl.Rectangle{0, 0,
-        f32(subs.tmap.width * subs.tmap.tileset_size[0]),
-        f32(subs.tmap.height * subs.tmap.tileset_size[1])
+        -f32(stmap.width * subs.tmap.tileset_size[0]),
+        f32(stmap.height * subs.tmap.tileset_size[1])
     }
 
     target := rl.Rectangle{
-        f32(subs.tmap.width) * 0.5, f32(subs.tmap.height) * 0.5,
+        f32(stmap.width) * 0.5, f32(stmap.height) * 0.5,
         f32(stmap.width), f32(stmap.height)}
 
     rl.DrawTexturePro(subs.tex.texture,

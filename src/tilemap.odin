@@ -256,12 +256,12 @@ render_subscale_tilemap :: proc(tm: Tilemap, frontier: []bool) -> rl.RenderTextu
             tile := rl.Rectangle{
                 f32(tpos.x * tm.tileset_size.x), f32(tpos.y * tm.tileset_size.y),
                 f32(tm.tileset_size.x), f32(tm.tileset_size.y)}
-            target := rl.Rectangle{
-                f32(x * tm.tileset_size.x), f32(y * tm.tileset_size.y),
-                f32(tm.tileset_size.x), f32(tm.tileset_size.y)}
             origin := [2]f32{
                 f32(tm.tileset_size.x) * 0.5, f32(tm.tileset_size.y) * 0.5,
             }
+            target := rl.Rectangle{
+                f32(x * tm.tileset_size.x) + origin.x, f32(y * tm.tileset_size.y) + origin.y,
+                f32(tm.tileset_size.x), f32(tm.tileset_size.y)}
 
             rl.DrawTexturePro(tm.tileset, tile, target, origin,
                 tm.tile_rot[y*tm.width + x], tm.tile_tint[y*tm.width + x])

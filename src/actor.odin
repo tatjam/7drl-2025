@@ -175,10 +175,19 @@ create_subscale_map :: proc(for_actor: ^Actor, fname: string, sets: DungeonSetti
     }
 
     clear_rectangle :: proc(inmap: ^Tilemap, center, rad: [2]int) {
-        for dx:=-rad.x;dx < rad.x;dx+=1 {
-            for dy:=-rad.y;dy<rad.y;dy+=1 {
+        for dx:=-rad.x;dx <= rad.x;dx+=1 {
+            for dy:=-rad.y;dy<=rad.y;dy+=1 {
                 p := center + [2]int{dx, dy}
                 inmap.walls[p.y * inmap.width + p.x] = false
+            }
+        }
+    }
+
+    set_footprint :: proc(inmap: ^Tilemap, center, s, e: [2]int, val := true) {
+        for dx:=s.x; dx <= e.x; dx+=1 {
+            for dy:=s.y; dy <= e.y; dy+=1 {
+                p := center + [2]int{dx, dy}
+                inmap.walls[p.y * inmap.width + p.x] = val
             }
         }
     }
@@ -195,18 +204,26 @@ create_subscale_map :: proc(for_actor: ^Actor, fname: string, sets: DungeonSetti
     // Run wires and build rooms for organs
     game := for_actor.in_game
     cortex : int
+    engines : [dynamic]int
     CORTEX_ID :: [3]u8{0, 0, 255}
     MOTOR_ID :: [3]u8{255, 0, 0}
 
-    for tag in tags {
+
+    for &tag in tags {
         if tag.tag == CORTEX_ID {
-            cortex = create_cortex(game, tag.pos, for_actor.id, 0)
-            clear_rectangle(&fullscale.subscale.tmap, tag.pos, [2]int{4,4})
+            cortex = create_cortex(game, tag.pos, for_actor.id, rl.GetRandomValue(0, 3))
+            clear_rectangle(&fullscale.subscale.tmap, tag.pos, [2]int{2,2})
+            set_footprint(&fullscale.subscale.tmap, tag.pos, [2]int{-1,-1}, [2]int{1,1})
         } else if tag.tag == MOTOR_ID {
-            create_engine(game, tag.pos, for_actor.id, 0)
-            clear_rectangle(&fullscale.subscale.tmap, tag.pos, [2]int{4,3})
+            engine := create_engine(game, tag.pos, for_actor.id, rl.GetRandomValue(0, 3))
+            clear_rectangle(&fullscale.subscale.tmap, tag.pos, [2]int{2,2})
+            set_footprint(&fullscale.subscale.tmap, tag.pos, [2]int{-1,-1}, [2]int{1,0})
+            append(&engines, engine)
         }
     }
+
+    // Run cables
+    //run_cable(&worldmap, frontier[:], )
 
     resize(&worldmap.tile_to_tex, width*height)
     resize(&worldmap.tile_rot, width*height)
@@ -264,8 +281,6 @@ draw_actor :: proc(actor: ^Actor) {
         rl.WHITE
         )
 
-    rl.DrawCircleV(linalg.to_f32(actor.pos)  + [2]f32{0.5, 0.5}, 0.1, rl.RED)
-    rl.DrawCircleV(linalg.to_f32(pos), 0.1, rl.BLUE)
 }
 
 create_cortex :: proc(game: ^GameState, pos: [2]int, inside: int, orient: c.int) -> (id: int) {
