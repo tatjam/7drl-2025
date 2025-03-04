@@ -48,6 +48,8 @@ Actor :: struct {
     sprite_rect: rl.Rectangle,
     sprite_size: [2]int,
 
+    // For sprites which have different directions based on sprite
+    ignore_dir_graphics: bool,
     dir: Direction,
     in_game: ^GameState,
 
@@ -169,9 +171,91 @@ create_subscale_map :: proc(for_actor: ^Actor, fname: string, sets: DungeonSetti
     fullscale, is_fullscale := &for_actor.scale_kind.(FullscaleActor)
     assert(is_fullscale)
 
-    run_cable :: proc(inmap: ^Tilemap, frontier: []bool, from, to: [2]int) -> (out: SubscaleWire) {
+    run_cable :: proc(inmap: ^Tilemap, frontier: []bool, from, to: [2]int,
+        connect_start, connect_end: [2]int, from_act, to_act: int, cable_map: []bool) -> (out: SubscaleWire) {
+
+        path := astar_wall(from, to, inmap.walls[:], inmap.width, max(int), 0, frontier)
+        if len(path) == 0 {
+
+            path = astar_wall(from, to, inmap.walls[:], inmap.width, 100, 0, frontier)
+            for step in path {
+                inmap.walls[step.y * inmap.width + step.x] = false
+            }
+        }
+
+        out.steps = path
+        out.start_actor = from_act
+        out.end_actor = to_act
+
+        cable_map[connect_start.y * inmap.width + connect_start.x] = true
+        cable_map[connect_end.y * inmap.width + connect_end.x] = true
+        for p in path {
+            cable_map[p.y * inmap.width + p.x] = true
+        }
 
         return
+    }
+
+    mesh_cables :: proc(inmap: ^Tilemap, cables: []bool) {
+        for y := 1; y < inmap.height - 1; y += 1 {
+            for x := 1; x < inmap.width - 1; x += 1 {
+                if cables[y * inmap.width + x] {
+                    n := cables[(y - 1) * inmap.width + x]
+                    e := cables[y * inmap.width + x + 1]
+                    s := cables[(y + 1) * inmap.width + x]
+                    w := cables[y * inmap.width + x - 1]
+
+                    num := 0
+                    num += 1 if n else 0
+                    num += 1 if e else 0
+                    num += 1 if s else 0
+                    num += 1 if w else 0
+
+                    assert(num > 0)
+                    if num == 1 {
+                        // Nothing, this one is hidden below a target
+                    } else if num == 2 {
+                        // Two-way junction, may or may not be curved
+                        if e && w {
+                            inmap.tile_to_tex[y * inmap.width + x] = [2]int{2, 0}
+                            inmap.tile_rot[y * inmap.width + x] = 0.0
+                        } else if n && s {
+                            inmap.tile_to_tex[y * inmap.width + x] = [2]int{2, 0}
+                            inmap.tile_rot[y * inmap.width + x] = 90.0
+                        } else if n && w {
+                            inmap.tile_to_tex[y * inmap.width + x] = [2]int{2, 1}
+                            inmap.tile_rot[y * inmap.width + x] = 0.0
+                        } else if n && e {
+                            inmap.tile_to_tex[y * inmap.width + x] = [2]int{2, 1}
+                            inmap.tile_rot[y * inmap.width + x] = 90.0
+                        } else if s && w {
+                            inmap.tile_to_tex[y * inmap.width + x] = [2]int{2, 1}
+                            inmap.tile_rot[y * inmap.width + x] = 270.0
+                        } else if s && e {
+                            inmap.tile_to_tex[y * inmap.width + x] = [2]int{2, 1}
+                            inmap.tile_rot[y * inmap.width + x] = 180.0
+                        }
+
+                    } else if num == 3 {
+                        // Three-way junction
+                        inmap.tile_to_tex[y * inmap.width + x] = [2]int{2, 2}
+                        if !s {
+                            inmap.tile_rot[y * inmap.width + x] = 0
+                        } else if !w {
+                            inmap.tile_rot[y * inmap.width + x] = 90.0
+                        } else if !n {
+                            inmap.tile_rot[y * inmap.width + x] = 180.0
+                        } else {
+                            inmap.tile_rot[y * inmap.width + x] = 270.0
+                        }
+                    } else if num == 4 {
+                        // Four-way junction
+                        inmap.tile_to_tex[y * inmap.width + x] = [2]int{2, 3}
+                    }
+
+                }
+            }
+        }
     }
 
     clear_rectangle :: proc(inmap: ^Tilemap, center, rad: [2]int) {
@@ -197,7 +281,7 @@ create_subscale_map :: proc(for_actor: ^Actor, fname: string, sets: DungeonSetti
     fullscale.subscale.tmap = create_tilemap(dungeon, frontier[:], width, dungeon_rooms)
     tex := get_texture(&for_actor.in_game.assets, "res/smalltiles.png")
     fullscale.subscale.tmap.tileset = tex
-    fullscale.subscale.tmap.tileset_size = [2]int{int(tex.width) / 2, int(tex.height) / 4}
+    fullscale.subscale.tmap.tileset_size = [2]int{int(tex.width) / 3, int(tex.height) / 4}
     worldmap := &fullscale.subscale.tmap
     height := worldmap.height
 
@@ -208,6 +292,8 @@ create_subscale_map :: proc(for_actor: ^Actor, fname: string, sets: DungeonSetti
     CORTEX_ID :: [3]u8{0, 0, 255}
     MOTOR_ID :: [3]u8{255, 0, 0}
 
+    cable_map := make_dynamic_array_len([dynamic]bool, worldmap.width * worldmap.height)
+    defer delete(cable_map)
 
     for &tag in tags {
         if tag.tag == CORTEX_ID {
@@ -222,8 +308,13 @@ create_subscale_map :: proc(for_actor: ^Actor, fname: string, sets: DungeonSetti
         }
     }
 
-    // Run cables
-    //run_cable(&worldmap, frontier[:], )
+    // Run cables from cortex to everything else
+    cable_start, cable_start_in := cortex_cable_location(&game.npcs[cortex])
+    for engine in engines {
+        cable_end, cable_end_in := engine_cable_location(&game.npcs[engine])
+        run_cable(worldmap, frontier[:], cable_start, cable_end, cable_start_in, cable_end_in, cortex, engine, cable_map[:])
+    }
+
 
     resize(&worldmap.tile_to_tex, width*height)
     resize(&worldmap.tile_rot, width*height)
@@ -244,6 +335,7 @@ create_subscale_map :: proc(for_actor: ^Actor, fname: string, sets: DungeonSetti
         }
     }
 
+    mesh_cables(worldmap, cable_map[:])
 
     delete(actor_wall)
     return frontier
@@ -263,16 +355,18 @@ draw_actor :: proc(actor: ^Actor) {
 
     target_rect := rl.Rectangle{pos.x, pos.y, f32(actor.sprite_size.x), f32(actor.sprite_size.y)}
 
-    rot : f32
-    switch actor.dir {
-    case .NORTH:
-        rot = 0.0
-    case .EAST:
-        rot = 90.0
-    case .SOUTH:
-        rot = 180.0
-    case .WEST:
-        rot = 270.0
+    rot : f32 = 0.0
+    if !actor.ignore_dir_graphics {
+        switch actor.dir {
+        case .NORTH:
+            rot = 0.0
+        case .EAST:
+            rot = 90.0
+        case .SOUTH:
+            rot = 180.0
+        case .WEST:
+            rot = 270.0
+        }
     }
     rl.DrawTexturePro(actor.sprite,
         actor.sprite_rect, target_rect,
@@ -288,7 +382,8 @@ create_cortex :: proc(game: ^GameState, pos: [2]int, inside: int, orient: c.int)
     actor := &game.npcs[id]
 
     actor.pos = pos
-    actor.dir = .NORTH
+    actor.ignore_dir_graphics = true
+    actor.dir = Direction(orient)
     actor.alive = true
     actor.sprite = get_texture(&game.assets, "res/agents/cortex.png")
     actor.sprite_rect = rl.Rectangle{
@@ -301,13 +396,45 @@ create_cortex :: proc(game: ^GameState, pos: [2]int, inside: int, orient: c.int)
     return
 }
 
+cortex_cable_location :: proc(cortex: ^Actor) -> (outer: [2]int, inner: [2]int) {
+    switch cortex.dir {
+    case .NORTH:
+        return cortex.pos + [2]int{0, -2}, cortex.pos + [2]int{0, -1}
+    case .EAST:
+        return cortex.pos + [2]int{2, 0}, cortex.pos + [2]int{1, 0}
+    case .SOUTH:
+        return cortex.pos + [2]int{0, 2}, cortex.pos + [2]int{0, 1}
+    case .WEST:
+        return cortex.pos + [2]int{-2, 0}, cortex.pos + [2]int{-1, 0}
+    }
+    assert(false, "invalid cortex direction")
+    return cortex.pos, cortex.pos
+}
+
+engine_cable_location :: proc(engine: ^Actor) -> (outer: [2]int, inner: [2]int) {
+
+    switch engine.dir {
+    case .NORTH:
+        return engine.pos + [2]int{0, -2}, engine.pos + [2]int{0, -1}
+    case .EAST:
+        return engine.pos + [2]int{2, 0}, engine.pos + [2]int{1, 0}
+    case .SOUTH:
+        return engine.pos + [2]int{0, 1}, engine.pos + [2]int{0, 0}
+    case .WEST:
+        return engine.pos + [2]int{-2, 0}, engine.pos + [2]int{-1, 0}
+    }
+    assert(false, "invalid engine direction")
+    return engine.pos, engine.pos
+}
+
 create_engine :: proc(game: ^GameState, pos: [2]int, inside: int, orient: c.int) -> (id: int) {
     id = game_create_npc(game)
     actor := &game.npcs[id]
 
 
     actor.pos = pos
-    actor.dir = .NORTH
+    actor.ignore_dir_graphics = true
+    actor.dir = Direction(orient)
     actor.alive = true
     actor.sprite = get_texture(&game.assets, "res/agents/engine.png")
     w := actor.sprite.width / 4
