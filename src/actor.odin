@@ -26,10 +26,13 @@ SubscaleMap :: struct {
     tmap: Tilemap,
     tex: rl.RenderTexture,
     wire: [dynamic]SubscaleWire,
+    cortex: int,
+    engines: [dynamic]int,
+    radars: [dynamic]int,
 }
 
 SubscaleActor :: struct {
-    subscale_of: int
+    subscale_of: int,
 }
 
 FullscaleActor :: struct {
@@ -168,6 +171,7 @@ take_turn_monster :: proc(actor: ^MonsterActor) -> Action {
 
 create_subscale_map :: proc(for_actor: ^Actor, fname: string, sets: DungeonSettings) ->
     [dynamic]bool {
+
     fullscale, is_fullscale := &for_actor.scale_kind.(FullscaleActor)
     assert(is_fullscale)
 
@@ -289,8 +293,10 @@ create_subscale_map :: proc(for_actor: ^Actor, fname: string, sets: DungeonSetti
     game := for_actor.in_game
     cortex : int
     engines : [dynamic]int
+    radars : [dynamic]int
     CORTEX_ID :: [3]u8{0, 0, 255}
     MOTOR_ID :: [3]u8{255, 0, 0}
+    RADAR_ID :: [3]u8{0, 255, 0}
 
     cable_map := make_dynamic_array_len([dynamic]bool, worldmap.width * worldmap.height)
     defer delete(cable_map)
@@ -305,14 +311,28 @@ create_subscale_map :: proc(for_actor: ^Actor, fname: string, sets: DungeonSetti
             clear_rectangle(&fullscale.subscale.tmap, tag.pos, [2]int{2,2})
             set_footprint(&fullscale.subscale.tmap, tag.pos, [2]int{-1,-1}, [2]int{1,0})
             append(&engines, engine)
+        } else if tag.tag == RADAR_ID {
+            radar := create_radar(game, tag.pos, for_actor.id, rl.GetRandomValue(0, 3))
+            clear_rectangle(&fullscale.subscale.tmap, tag.pos, [2]int{2,2})
+            set_footprint(&fullscale.subscale.tmap, tag.pos, [2]int{-1,-1}, [2]int{1,0})
+            append(&radars, radar)
         }
     }
 
     // Run cables from cortex to everything else
     cable_start, cable_start_in := cortex_cable_location(&game.npcs[cortex])
+    wires : [dynamic]SubscaleWire
     for engine in engines {
         cable_end, cable_end_in := engine_cable_location(&game.npcs[engine])
-        run_cable(worldmap, frontier[:], cable_start, cable_end, cable_start_in, cable_end_in, cortex, engine, cable_map[:])
+        nwire := run_cable(worldmap, frontier[:], cable_start, cable_end,
+            cable_start_in, cable_end_in, cortex, engine, cable_map[:])
+        append(&wires, nwire)
+    }
+    for radar in radars {
+        cable_end, cable_end_in := engine_cable_location(&game.npcs[radar])
+        nwire := run_cable(worldmap, frontier[:], cable_start, cable_end,
+        cable_start_in, cable_end_in, cortex, radar, cable_map[:])
+        append(&wires, nwire)
     }
 
 
@@ -337,6 +357,10 @@ create_subscale_map :: proc(for_actor: ^Actor, fname: string, sets: DungeonSetti
 
     mesh_cables(worldmap, cable_map[:])
 
+    fullscale.subscale.cortex = cortex
+    fullscale.subscale.engines = engines
+    fullscale.subscale.radars = engines
+    fullscale.subscale.wire = wires
     delete(actor_wall)
     return frontier
 
@@ -427,6 +451,22 @@ engine_cable_location :: proc(engine: ^Actor) -> (outer: [2]int, inner: [2]int) 
     return engine.pos, engine.pos
 }
 
+radar_cable_location :: proc(radar: ^Actor) -> (outer: [2]int, inner: [2]int) {
+
+    switch radar.dir {
+    case .NORTH:
+        return radar.pos + [2]int{0, -2}, radar.pos + [2]int{0, -1}
+    case .EAST:
+        return radar.pos + [2]int{2, 0}, radar.pos + [2]int{1, 0}
+    case .SOUTH:
+        return radar.pos + [2]int{0, 1}, radar.pos + [2]int{0, 0}
+    case .WEST:
+        return radar.pos + [2]int{-2, 0}, radar.pos + [2]int{-1, 0}
+    }
+    assert(false, "invalid radar direction")
+    return radar.pos, radar.pos
+}
+
 create_engine :: proc(game: ^GameState, pos: [2]int, inside: int, orient: c.int) -> (id: int) {
     id = game_create_npc(game)
     actor := &game.npcs[id]
@@ -437,6 +477,27 @@ create_engine :: proc(game: ^GameState, pos: [2]int, inside: int, orient: c.int)
     actor.dir = Direction(orient)
     actor.alive = true
     actor.sprite = get_texture(&game.assets, "res/agents/engine.png")
+    w := actor.sprite.width / 4
+    actor.sprite_rect = rl.Rectangle{
+        f32(orient * w), 0,
+        f32(w), f32(actor.sprite.height)}
+    actor.sprite_size = [2]int{3, 2}
+
+    actor.scale_kind = SubscaleActor{subscale_of = inside}
+
+    return
+}
+
+create_radar :: proc(game: ^GameState, pos: [2]int, inside: int, orient: c.int) -> (id: int) {
+    id = game_create_npc(game)
+    actor := &game.npcs[id]
+
+
+    actor.pos = pos
+    actor.ignore_dir_graphics = true
+    actor.dir = Direction(orient)
+    actor.alive = true
+    actor.sprite = get_texture(&game.assets, "res/agents/radar.png")
     w := actor.sprite.width / 4
     actor.sprite_rect = rl.Rectangle{
         f32(orient * w), 0,
