@@ -25,6 +25,38 @@ GameState :: struct {
     show_help: bool,
 }
 
+get_actor_aabb :: proc(actor: ^Actor) -> (tl: [2]int, size: [2]int) {
+    size = actor.sprite_size
+    tl = actor.pos - actor.sprite_size / 2
+    return
+}
+
+actor_intersects :: proc(actor:^Actor, pos: [2]int, subscale_of: ^Actor = nil) -> bool {
+    subscale, is_subscale := actor.scale_kind.(SubscaleActor)
+
+    if subscale_of == nil && is_subscale do return false
+
+    if (subscale_of != nil && is_subscale && subscale.subscale_of == subscale_of) ||
+        (subscale_of == nil && !is_subscale) {
+
+        tl, size := get_actor_aabb(actor)
+        return pos.x >= tl.x && pos.x < tl.x + size.x && pos.y >= tl.y && pos.y < tl.y + size.y
+    }
+
+    return false
+}
+
+get_actor_at :: proc(game: ^GameState, pos: [2]int, subscale_of: ^Actor = nil) -> ^Actor {
+    if actor_intersects(&game.hero, pos, subscale_of) do return &game.hero
+    if actor_intersects(&game.probe, pos, subscale_of) do return &game.probe
+
+    for npc in game.npcs {
+        if actor_intersects(npc, pos, subscale_of) do return npc
+    }
+
+    return nil
+}
+
 create_game :: proc() -> (out: GameState) {
     out.uifont = rl.LoadFont("res/fonts/setback.png")
     out.turni = -1
@@ -133,8 +165,12 @@ game_update_turn :: proc(game: ^GameState) {
                 } else {
                     act_action(action)
                 }
+                game.npcs[game.turni].actions_taken += 1
 
-                game.turni += 1
+                if game.npcs[game.turni].actions_taken > game.npcs[game.turni].actions_per_turn {
+                    game.npcs[game.turni].actions_taken = 0
+                    game.turni += 1
+                }
             }
         }
     }
@@ -208,7 +244,7 @@ game_draw_subscale :: proc(game: ^GameState) {
 
     subscale_screen := rl.Rectangle{
         GAME_PANEL_W * f32(rl.GetScreenWidth()), 0.0,
-        (1.0 - GAME_PANEL_W) * f32(rl.GetScreenWidth()), SCALE_PANEL_H * f32(rl.GetScreenHeight())}
+        (1.0 - GAME_PANEL_W) * f32(rl.GetScreenWidth()), f32(rl.GetScreenHeight())}
 
     subs := game.focus_subscale.scale_kind.(FullscaleActor).subscale
     stmap := subs.tmap

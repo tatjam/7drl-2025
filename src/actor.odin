@@ -48,6 +48,10 @@ ActorClass :: enum {
 }
 
 Actor :: struct {
+    // If set to 0, an action will take place eitherway
+    actions_per_turn: int,
+    actions_taken: int,
+
     class: bit_set[ActorClass],
     alive: bool,
     pos: [2]int,

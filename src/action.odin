@@ -7,7 +7,7 @@ import "core:math/linalg"
 Action :: struct {
     by_actor: ^Actor,
     need_see: [dynamic][2]int,
-    variant: union{MoveAction, TurnAction, NoAction}
+    variant: union{NoAction, MoveAction, TurnAction, ShootProbeAction}
 }
 
 MoveAction :: struct {
@@ -26,14 +26,13 @@ NoAction :: struct {
 
 
 
+
 no_action :: proc() -> (out: Action) {
     out.variant = NoAction{}
     return
 }
 
-// Clamps to prevent skipping walls
-move_action :: proc(actor: ^Actor, dir: Direction, steps: int) -> Action {
-    // Check for collision
+dir_to_delta :: proc(dir: Direction) -> [2]int {
     delta: [2]int
     switch dir {
     case .NORTH:
@@ -45,6 +44,13 @@ move_action :: proc(actor: ^Actor, dir: Direction, steps: int) -> Action {
     case .WEST:
         delta = [2]int{-1, 0}
     }
+    return delta
+}
+
+// Clamps to prevent skipping walls
+move_action :: proc(actor: ^Actor, dir: Direction, steps: int) -> Action {
+    // Check for collision
+    delta := dir_to_delta(dir)
 
     i := 0
     np := actor.pos
@@ -125,6 +131,9 @@ animate_action :: proc(action: Action, prog: f32) -> f32 {
         return animate_move_action(action, prog)
     case TurnAction:
         return animate_turn_action(action, prog)
+    case ShootProbeAction:
+        assert(false)
+        return 0.0
     case NoAction:
         assert(false)
         return 0.0
@@ -139,6 +148,8 @@ act_action :: proc(action: Action) {
         act_move_action(action)
     case TurnAction:
         act_turn_action(action)
+    case ShootProbeAction:
+        assert(false)
     case NoAction:
     case:
     }
@@ -150,5 +161,36 @@ turn_action :: proc(actor: ^Actor, dir: Direction) -> (out: Action) {
     append(&out.need_see, actor.pos)
 
     out.variant = TurnAction{dir = dir}
+    return
+}
+
+ShootProbeAction :: struct {
+    startpos: [2]int,
+    endpos: [2]int,
+    hit: ^Actor,
+    dir: Direction,
+}
+
+shoot_probe_action :: proc(actor: ^Actor, dir: Direction) -> (out: Action) {
+    out.by_actor = actor
+    out.need_see = make([dynamic][2]int, context.temp_allocator)
+    append(&out.need_see, actor.pos)
+    pos := actor.pos
+    hit: ^Actor = nil
+
+    w := actor.in_game.worldmap.width
+    h := actor.in_game.worldmap.height
+
+    for {
+        pos += dir_to_delta(dir)
+        if pos.x < 0 || pos.y < 0 || pos.x > w || pos.y > h do break
+        if actor.in_game.worldmap.walls[pos.y * w + pos.x] do break
+
+        hit = get_actor_at(actor.in_game, pos, nil)
+        if hit != nil do break
+    }
+
+    out.variant = ShootProbeAction{startpos=actor.pos, endpos=pos, hit=hit, dir = dir}
+
     return
 }
