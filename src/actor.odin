@@ -71,7 +71,7 @@ ProbeActor :: struct {
     using base: Actor
 }
 
-MonsterActor :: struct {
+NPCActor :: struct {
     using base: Actor
 }
 
@@ -109,7 +109,7 @@ create_hero :: proc(game: ^GameState, pos: [2]int) -> (out: HeroActor) {
     frontier := create_subscale_map(&out, "res/agents/player_interior.png", DungeonSettings{
         max_room_size = [2]int{6, 6},
         min_room_size = [2]int{3, 3},
-        num_rooms = 16,
+        num_rooms = 14,
     })
 
     fs.subscale.tex = render_subscale_tilemap(fs.subscale.tmap, frontier[:])
@@ -163,7 +163,7 @@ take_turn_hero :: proc(actor: ^HeroActor) -> Action {
     return no_action()
 }
 
-take_turn_monster :: proc(actor: ^MonsterActor) -> Action {
+take_turn_monster :: proc(actor: ^NPCActor) -> Action {
     return no_action()
 }
 
@@ -179,8 +179,9 @@ create_subscale_map :: proc(for_actor: ^Actor, fname: string, sets: DungeonSetti
         connect_start, connect_end: [2]int, from_act, to_act: int, cable_map: []bool) -> (out: SubscaleWire) {
 
         path := astar_wall(from, to, inmap.walls[:], inmap.width, max(int), 0, frontier)
+        defer delete(path)
         if len(path) == 0 {
-
+            delete(path)
             path = astar_wall(from, to, inmap.walls[:], inmap.width, 100, 0, frontier)
             for step in path {
                 inmap.walls[step.y * inmap.width + step.x] = false
@@ -281,6 +282,8 @@ create_subscale_map :: proc(for_actor: ^Actor, fname: string, sets: DungeonSetti
     }
 
     actor_wall, width, tags := wall_from_image(fname)
+    defer delete(tags)
+
     dungeon, dungeon_rooms, frontier := dungeon_gen(actor_wall[:], width, sets)
     fullscale.subscale.tmap = create_tilemap(dungeon, frontier[:], width, dungeon_rooms)
     tex := get_texture(&for_actor.in_game.assets, "res/smalltiles.png")
@@ -359,7 +362,7 @@ create_subscale_map :: proc(for_actor: ^Actor, fname: string, sets: DungeonSetti
 
     fullscale.subscale.cortex = cortex
     fullscale.subscale.engines = engines
-    fullscale.subscale.radars = engines
+    fullscale.subscale.radars = radars
     fullscale.subscale.wire = wires
     delete(actor_wall)
     return frontier
@@ -369,6 +372,10 @@ create_subscale_map :: proc(for_actor: ^Actor, fname: string, sets: DungeonSetti
 destroy_subscale_map :: proc(for_actor: ^Actor) {
     fullscale, is_fullscale := &for_actor.scale_kind.(FullscaleActor)
     if !is_fullscale do return
+
+    delete(fullscale.subscale.radars)
+    delete(fullscale.subscale.engines)
+    delete(fullscale.subscale.wire)
 
     destroy_tilemap(&fullscale.subscale.tmap)
     rl.UnloadRenderTexture(fullscale.subscale.tex)

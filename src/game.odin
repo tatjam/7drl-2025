@@ -14,7 +14,7 @@ GameState :: struct {
 
     hero: HeroActor,
     probe: ProbeActor,
-    npcs: [dynamic]MonsterActor,
+    npcs: [dynamic]NPCActor,
     turni: int,
 
     focus_subscale: int,
@@ -186,7 +186,7 @@ game_draw_game :: proc(game: ^GameState) {
 game_create_npc :: proc(game: ^GameState) -> int {
     id := len(game.npcs)
 
-    actor := MonsterActor{}
+    actor := NPCActor{}
     actor.id = id
     actor.in_game = game
     append(&game.npcs, actor)
