@@ -14,10 +14,10 @@ GameState :: struct {
 
     hero: HeroActor,
     probe: ProbeActor,
-    npcs: [dynamic]NPCActor,
+    npcs: [dynamic]^NPCActor,
     turni: int,
 
-    focus_subscale: int,
+    focus_subscale: ^Actor,
 
     cur_action: Maybe(Action),
     anim_progress: f32,
@@ -29,7 +29,7 @@ create_game :: proc() -> (out: GameState) {
     out.uifont = rl.LoadFont("res/fonts/setback.png")
     out.turni = -1
     out.anim_progress = -1.0
-    out.focus_subscale = -1
+    out.focus_subscale = &out.hero
 
     return
 }
@@ -37,8 +37,9 @@ create_game :: proc() -> (out: GameState) {
 destroy_game :: proc(game: ^GameState) {
     destroy_actor(&game.probe)
     destroy_actor(&game.hero)
-    for &npc in game.npcs {
-        destroy_actor(&npc)
+    for npc in game.npcs {
+        destroy_actor(npc)
+        free(npc)
     }
     delete(game.statuslog)
     delete(game.npcs)
@@ -126,7 +127,7 @@ game_update_turn :: proc(game: ^GameState) {
                 game.turni = -1
                 break
             } else {
-                action := take_turn_monster(&game.npcs[game.turni])
+                action := take_turn_monster(game.npcs[game.turni])
                 if game_do_action(game, action) {
                     break
                 } else {
@@ -182,25 +183,13 @@ game_draw_game :: proc(game: ^GameState) {
 
 }
 
-// You must customize game.npcs[returned_id] afterwards!
-game_create_npc :: proc(game: ^GameState) -> int {
+game_create_npc :: proc(game: ^GameState) -> ^Actor {
     id := len(game.npcs)
 
-    actor := NPCActor{}
-    actor.id = id
+    actor := new(NPCActor)
     actor.in_game = game
     append(&game.npcs, actor)
-    return id
-}
-
-game_get_actor :: proc(game: ^GameState, actor_id: int) -> ^Actor {
-    if actor_id == -2 {
-        return &game.probe
-    } else if actor_id == -1 {
-        return &game.hero
-    } else {
-        return &game.npcs[actor_id]
-    }
+    return actor
 }
 
 game_draw_subscale :: proc(game: ^GameState) {
@@ -215,7 +204,7 @@ game_draw_subscale :: proc(game: ^GameState) {
         GAME_PANEL_W * f32(rl.GetScreenWidth()), 0.0,
         (1.0 - GAME_PANEL_W) * f32(rl.GetScreenWidth()), SCALE_PANEL_H * f32(rl.GetScreenHeight())}
 
-    subs := game_get_actor(game, game.focus_subscale).scale_kind.(FullscaleActor).subscale
+    subs := game.focus_subscale.scale_kind.(FullscaleActor).subscale
     stmap := subs.tmap
     cam.target = [2]f32{f32(stmap.width) * 0.5, f32(stmap.height) * 0.5}
     cam.offset = [2]f32{
@@ -247,7 +236,7 @@ game_draw_subscale :: proc(game: ^GameState) {
     for &actor in game.npcs {
         subscale, is_subscale := actor.scale_kind.(SubscaleActor)
         if is_subscale && subscale.subscale_of == game.focus_subscale {
-            draw_actor(&actor)
+            draw_actor(actor)
         }
     }
 

@@ -13,8 +13,8 @@ Direction :: enum {
 }
 
 SubscaleWire :: struct {
-    start_actor: int,
-    end_actor: int,
+    start_actor: ^Actor,
+    end_actor: ^Actor,
     steps: [dynamic][2]int,
     // Progress along length of wire
     charges: [dynamic]int,
@@ -26,21 +26,29 @@ SubscaleMap :: struct {
     tmap: Tilemap,
     tex: rl.RenderTexture,
     wire: [dynamic]SubscaleWire,
-    cortex: int,
-    engines: [dynamic]int,
-    radars: [dynamic]int,
+    cortex: ^Actor,
+    engines: [dynamic]^Actor,
+    radars: [dynamic]^Actor,
 }
 
 SubscaleActor :: struct {
-    subscale_of: int,
+    subscale_of: ^Actor,
 }
 
 FullscaleActor :: struct {
     subscale: SubscaleMap,
 }
 
+ActorClass :: enum {
+    HERO,
+    FRIENDLY,
+    HOSTILE,
+    ENERGY,
+    ENVIRONMENT,
+}
+
 Actor :: struct {
-    id: int,
+    class: bit_set[ActorClass],
     alive: bool,
     pos: [2]int,
     // Offset while drawing, for animation
@@ -71,7 +79,36 @@ ProbeActor :: struct {
     using base: Actor
 }
 
+NPCState :: struct {
+
+}
+
+ChaserAI :: struct {
+
+}
+
+MovementAI :: union {
+    ChaserAI,
+}
+
+RandomMoveAI :: struct {
+
+}
+
+LoiterAI :: union {
+    RandomMoveAI
+}
+
+AttackAI :: union {
+}
+
+
 NPCActor :: struct {
+    mov_ai: MovementAI,
+    loiter_ai: LoiterAI,
+    attack_ai: AttackAI,
+    target_acquire_class: ActorClass,
+
     using base: Actor
 }
 
@@ -93,9 +130,10 @@ destroy_actor :: proc(actor: ^Actor) {
     destroy_subscale_map(actor)
 }
 
-create_hero :: proc(game: ^GameState, pos: [2]int) -> (out: HeroActor) {
-    out.id = -1
+create_hero :: proc(game: ^GameState, pos: [2]int) {
+    out := &game.hero
     out.in_game = game
+    out.class = {.HERO, .FRIENDLY}
     out.pos = pos
     out.dir = .NORTH
     out.alive = true
@@ -106,21 +144,22 @@ create_hero :: proc(game: ^GameState, pos: [2]int) -> (out: HeroActor) {
     out.scale_kind = FullscaleActor{}
     fs := &out.scale_kind.(FullscaleActor)
 
-    frontier := create_subscale_map(&out, "res/agents/player_interior.png", DungeonSettings{
+    frontier := create_subscale_map(out, "res/agents/player_interior.png", DungeonSettings{
         max_room_size = [2]int{6, 6},
         min_room_size = [2]int{3, 3},
         num_rooms = 14,
     })
+    defer delete(frontier)
 
     fs.subscale.tex = render_subscale_tilemap(fs.subscale.tmap, frontier[:])
-    delete(frontier)
 
     return
 }
 
-create_probe :: proc(game: ^GameState, pos: [2]int) -> (out: ProbeActor) {
-    out.id = -2
+create_probe :: proc(game: ^GameState, pos: [2]int) {
+    out := &game.probe
     out.in_game = game
+    out.class = {.HERO, .FRIENDLY}
     out.pos = pos
     out.dir = .NORTH
     out.alive = true
@@ -129,7 +168,7 @@ create_probe :: proc(game: ^GameState, pos: [2]int) -> (out: ProbeActor) {
     out.sprite_size = [2]int{1, 1}
 
     out.scale_kind = SubscaleActor{
-        subscale_of = -1
+        subscale_of = &game.hero
     }
     fs := &out.scale_kind.(SubscaleActor)
 
@@ -169,6 +208,7 @@ take_turn_monster :: proc(actor: ^NPCActor) -> Action {
 
 
 
+
 create_subscale_map :: proc(for_actor: ^Actor, fname: string, sets: DungeonSettings) ->
     [dynamic]bool {
 
@@ -176,7 +216,7 @@ create_subscale_map :: proc(for_actor: ^Actor, fname: string, sets: DungeonSetti
     assert(is_fullscale)
 
     run_cable :: proc(inmap: ^Tilemap, frontier: []bool, from, to: [2]int,
-        connect_start, connect_end: [2]int, from_act, to_act: int, cable_map: []bool) -> (out: SubscaleWire) {
+        connect_start, connect_end: [2]int, from_act, to_act: ^Actor, cable_map: []bool) -> (out: SubscaleWire) {
 
         path := astar_wall(from, to, inmap.walls[:], inmap.width, max(int), 0, frontier)
         defer delete(path)
@@ -294,9 +334,9 @@ create_subscale_map :: proc(for_actor: ^Actor, fname: string, sets: DungeonSetti
 
     // Run wires and build rooms for organs
     game := for_actor.in_game
-    cortex : int
-    engines : [dynamic]int
-    radars : [dynamic]int
+    cortex : ^Actor
+    engines : [dynamic]^Actor
+    radars : [dynamic]^Actor
     CORTEX_ID :: [3]u8{0, 0, 255}
     MOTOR_ID :: [3]u8{255, 0, 0}
     RADAR_ID :: [3]u8{0, 255, 0}
@@ -306,16 +346,16 @@ create_subscale_map :: proc(for_actor: ^Actor, fname: string, sets: DungeonSetti
 
     for &tag in tags {
         if tag.tag == CORTEX_ID {
-            cortex = create_cortex(game, tag.pos, for_actor.id, rl.GetRandomValue(0, 3))
+            cortex = create_cortex(game, tag.pos, for_actor, rl.GetRandomValue(0, 3))
             clear_rectangle(&fullscale.subscale.tmap, tag.pos, [2]int{2,2})
             set_footprint(&fullscale.subscale.tmap, tag.pos, [2]int{-1,-1}, [2]int{1,1})
         } else if tag.tag == MOTOR_ID {
-            engine := create_engine(game, tag.pos, for_actor.id, rl.GetRandomValue(0, 3))
+            engine := create_engine(game, tag.pos, for_actor, rl.GetRandomValue(0, 3))
             clear_rectangle(&fullscale.subscale.tmap, tag.pos, [2]int{2,2})
             set_footprint(&fullscale.subscale.tmap, tag.pos, [2]int{-1,-1}, [2]int{1,0})
             append(&engines, engine)
         } else if tag.tag == RADAR_ID {
-            radar := create_radar(game, tag.pos, for_actor.id, rl.GetRandomValue(0, 3))
+            radar := create_radar(game, tag.pos, for_actor, rl.GetRandomValue(0, 3))
             clear_rectangle(&fullscale.subscale.tmap, tag.pos, [2]int{2,2})
             set_footprint(&fullscale.subscale.tmap, tag.pos, [2]int{-1,-1}, [2]int{1,0})
             append(&radars, radar)
@@ -323,25 +363,25 @@ create_subscale_map :: proc(for_actor: ^Actor, fname: string, sets: DungeonSetti
     }
 
     // Run cables from cortex to everything else
-    cable_start, cable_start_in := cortex_cable_location(&game.npcs[cortex])
+    cable_start, cable_start_in := cortex_cable_location(cortex)
     wires : [dynamic]SubscaleWire
     for engine in engines {
-        cable_end, cable_end_in := engine_cable_location(&game.npcs[engine])
+        cable_end, cable_end_in := engine_cable_location(engine)
         nwire := run_cable(worldmap, frontier[:], cable_start, cable_end,
             cable_start_in, cable_end_in, cortex, engine, cable_map[:])
         append(&wires, nwire)
     }
     for radar in radars {
-        cable_end, cable_end_in := engine_cable_location(&game.npcs[radar])
+        cable_end, cable_end_in := engine_cable_location(radar)
         nwire := run_cable(worldmap, frontier[:], cable_start, cable_end,
         cable_start_in, cable_end_in, cortex, radar, cable_map[:])
         append(&wires, nwire)
     }
 
 
-    resize(&worldmap.tile_to_tex, width*height)
-    resize(&worldmap.tile_rot, width*height)
-    resize(&worldmap.tile_tint, width*height)
+    worldmap.tile_rot = make_dynamic_array_len([dynamic]f32, width*height)
+    worldmap.tile_to_tex = make_dynamic_array_len([dynamic][2]int, width*height)
+    worldmap.tile_tint = make_dynamic_array_len([dynamic]rl.Color, width*height)
 
     orient := [4]f32{0.0, 90.0, 180.0, 270.0}
     // For now, simple wall-floor mapping
@@ -349,7 +389,7 @@ create_subscale_map :: proc(for_actor: ^Actor, fname: string, sets: DungeonSetti
         for xi:=0; xi < width; xi+=1 {
             i := yi*width+xi
             tex := [2]int{0, int(rl.GetRandomValue(0, 3))}
-            if dungeon[i] {
+            if worldmap.walls[i] {
                 tex = [2]int{1, int(rl.GetRandomValue(0, 3))}
             }
             worldmap.tile_to_tex[i] = tex
@@ -408,9 +448,9 @@ draw_actor :: proc(actor: ^Actor) {
 
 }
 
-create_cortex :: proc(game: ^GameState, pos: [2]int, inside: int, orient: c.int) -> (id: int) {
-    id = game_create_npc(game)
-    actor := &game.npcs[id]
+create_cortex :: proc(game: ^GameState, pos: [2]int, inside: ^Actor, orient: c.int) -> ^Actor {
+    actor := game_create_npc(game)
+    actor.class = {.ENVIRONMENT}
 
     actor.pos = pos
     actor.ignore_dir_graphics = true
@@ -424,7 +464,7 @@ create_cortex :: proc(game: ^GameState, pos: [2]int, inside: int, orient: c.int)
 
     actor.scale_kind = SubscaleActor{subscale_of = inside}
 
-    return
+    return actor
 }
 
 cortex_cable_location :: proc(cortex: ^Actor) -> (outer: [2]int, inner: [2]int) {
@@ -474,9 +514,9 @@ radar_cable_location :: proc(radar: ^Actor) -> (outer: [2]int, inner: [2]int) {
     return radar.pos, radar.pos
 }
 
-create_engine :: proc(game: ^GameState, pos: [2]int, inside: int, orient: c.int) -> (id: int) {
-    id = game_create_npc(game)
-    actor := &game.npcs[id]
+create_engine :: proc(game: ^GameState, pos: [2]int, inside: ^Actor, orient: c.int) -> ^Actor {
+    actor := game_create_npc(game)
+    actor.class = {.ENVIRONMENT}
 
 
     actor.pos = pos
@@ -492,12 +532,12 @@ create_engine :: proc(game: ^GameState, pos: [2]int, inside: int, orient: c.int)
 
     actor.scale_kind = SubscaleActor{subscale_of = inside}
 
-    return
+    return actor
 }
 
-create_radar :: proc(game: ^GameState, pos: [2]int, inside: int, orient: c.int) -> (id: int) {
-    id = game_create_npc(game)
-    actor := &game.npcs[id]
+create_radar :: proc(game: ^GameState, pos: [2]int, inside: ^Actor, orient: c.int) -> ^Actor {
+    actor := game_create_npc(game)
+    actor.class = {.ENVIRONMENT}
 
 
     actor.pos = pos
@@ -513,5 +553,30 @@ create_radar :: proc(game: ^GameState, pos: [2]int, inside: int, orient: c.int) 
 
     actor.scale_kind = SubscaleActor{subscale_of = inside}
 
-    return
+    return actor
+}
+
+create_sentinel :: proc(game: ^GameState, pos: [2]int) -> ^Actor {
+    actor := game_create_npc(game)
+    actor.class = {.HOSTILE}
+    actor.pos = pos
+    actor.dir = .NORTH
+    actor.alive = true
+    actor.sprite = get_texture(&game.assets, "res/agents/sentinel.png")
+    actor.sprite_rect = rl.Rectangle{0, 0, f32(actor.sprite.width), f32(actor.sprite.height)}
+    actor.sprite_size = [2]int{1, 1}
+
+    actor.scale_kind = FullscaleActor{}
+    fs := &actor.scale_kind.(FullscaleActor)
+
+    frontier := create_subscale_map(actor, "res/agents/sentinel_interior.png", DungeonSettings{
+        max_room_size = [2]int{3, 3},
+        min_room_size = [2]int{2, 2},
+        num_rooms = 6,
+    })
+    defer delete(frontier)
+
+    fs.subscale.tex = render_subscale_tilemap(fs.subscale.tmap, frontier[:])
+
+    return actor
 }

@@ -49,9 +49,12 @@ main :: proc() {
     defer destroy_tilemap(&game.worldmap)
 
     startpos := tilemap_find_spawn_pos(game.worldmap)
-    game.hero = create_hero(&game, startpos)
+    create_hero(&game, startpos)
     probestartpos := tilemap_find_spawn_pos(game.hero.scale_kind.(FullscaleActor).subscale.tmap)
-    game.probe = create_probe(&game, probestartpos)
+    create_probe(&game, probestartpos)
+    game.focus_subscale = &game.hero
+
+    sentinel := create_sentinel(&game, game.hero.pos + [2]int{1, 0})
 
     for !rl.WindowShouldClose() {
         game_update(&game)
