@@ -176,6 +176,12 @@ game_draw_game :: proc(game: ^GameState) {
     rl.ClearBackground(rl.Color{30, 30, 30, 255})
     world_tilemap_cast_shadows(game.worldmap, cam.target, game_screen, cam)
     draw_actor(&game.hero)
+    for npc in game.npcs {
+        fullscale, is_fullscale := npc.scale_kind.(FullscaleActor)
+        if is_fullscale {
+            draw_actor(npc)
+        }
+    }
     draw_world_tilemap(game.worldmap)
 
     rl.EndScissorMode()
