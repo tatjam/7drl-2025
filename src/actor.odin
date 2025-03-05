@@ -181,6 +181,9 @@ create_probe :: proc(game: ^GameState, pos: [2]int) {
 }
 
 take_turn_hero :: proc(actor: ^HeroActor) -> Action {
+    if rl.IsKeyPressed(.P) {
+        return shoot_probe_action(actor, actor.dir)
+    }
     // HJKL turning / motion
     // Shift+HJKL turning only
     dir : Direction

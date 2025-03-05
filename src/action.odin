@@ -2,6 +2,7 @@ package src
 
 import rl "vendor:raylib"
 import "core:math/linalg"
+import "core:math"
 
 // Default action does nothing
 Action :: struct {
@@ -198,8 +199,23 @@ animate_shoot_probe_action :: proc(action: Action, prog: f32) -> f32 {
     SHOOT_STEP_TIME :: 0.15
     shoot := action.variant.(ShootProbeAction)
 
+    game := action.by_actor.in_game
+
+    if prog == 0.0 {
+        fx := new(ActionFX)
+        fx.pos = linalg.to_f32(shoot.startpos)
+        fx.sprite_tex = get_texture(&game.assets, "res/fx/probe.png")
+        fx.scale = 0.05
+        fx.tint = rl.WHITE
+        append(&game.fx, fx)
+    }
+    fx := game.fx[0]
+
     delta := linalg.to_f32(shoot.endpos - shoot.startpos)
     dist := linalg.length(delta)
+    fx.pos = linalg.to_f32(shoot.startpos) + delta * prog / (SHOOT_STEP_TIME * dist)
+    fx.pos += [2]f32{0.5, 0.5}
+    fx.angle = math.to_degrees(math.atan2(delta.y, delta.x)) + 90.0
 
     return dist * SHOOT_STEP_TIME
 }

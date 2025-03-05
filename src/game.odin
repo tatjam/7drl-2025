@@ -3,6 +3,18 @@ package src
 import rl "vendor:raylib"
 import "core:log"
 
+ActionFX :: struct {
+    visible: bool,
+    pos: [2]f32,
+    angle: f32,
+    scale: f32,
+
+    sprite_tex: rl.Texture2D,
+    sprite_rect: rl.Rectangle,
+    in_subscale: ^Actor,
+    tint: rl.Color,
+}
+
 GameState :: struct {
     uifont: rl.Font,
     assets: AssetManager,
@@ -23,6 +35,9 @@ GameState :: struct {
     anim_progress: f32,
 
     show_help: bool,
+
+    // Cleared at the end of the action animation
+    fx: [dynamic]^ActionFX,
 }
 
 get_actor_aabb :: proc(actor: ^Actor) -> (tl: [2]int, size: [2]int) {
@@ -135,6 +150,11 @@ game_update_anim :: proc(game: ^GameState) {
         // Carry out the action itself
         act_action(action)
         game.anim_progress = -1.0
+
+        for fx in game.fx {
+            free(fx)
+        }
+        clear(&game.fx)
     }
 
     game.anim_progress += rl.GetFrameTime()
@@ -218,6 +238,11 @@ game_draw_game :: proc(game: ^GameState) {
             draw_actor(npc)
         }
     }
+    for fx in game.fx {
+        if fx.in_subscale == nil {
+            game_draw_fx(fx)
+        }
+    }
     draw_world_tilemap(game.worldmap)
 
     rl.EndScissorMode()
@@ -282,13 +307,32 @@ game_draw_subscale :: proc(game: ^GameState) {
         }
     }
 
+    for fx in game.fx {
+        if fx.in_subscale == game.focus_subscale {
+            game_draw_fx(fx)
+        }
+    }
+
     rl.EndMode2D()
     rl.EndScissorMode()
 }
+
 
 game_draw :: proc(game: ^GameState) {
     game_draw_game(game)
     game_draw_subscale(game)
 
     ui_draw(game)
+}
+
+game_draw_fx :: proc(fx: ^ActionFX) {
+    source := fx.sprite_rect
+    if source.width == 0 do source.width = f32(fx.sprite_tex.width)
+    if source.height == 0 do source.height = f32(fx.sprite_tex.height)
+
+    dest := rl.Rectangle{fx.pos.x, fx.pos.y, source.width * fx.scale, source.height * fx.scale}
+    origin := [2]f32{source.width * fx.scale * 0.5, source.height * fx.scale * 0.5}
+
+    rl.DrawTexturePro(fx.sprite_tex, source, dest, origin, fx.angle, fx.tint)
+    rl.DrawCircleV(fx.pos, 0.1, rl.RED)
 }
