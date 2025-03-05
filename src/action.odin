@@ -132,8 +132,7 @@ animate_action :: proc(action: Action, prog: f32) -> f32 {
     case TurnAction:
         return animate_turn_action(action, prog)
     case ShootProbeAction:
-        assert(false)
-        return 0.0
+        return animate_shoot_probe_action(action, prog)
     case NoAction:
         assert(false)
         return 0.0
@@ -149,7 +148,7 @@ act_action :: proc(action: Action) {
     case TurnAction:
         act_turn_action(action)
     case ShootProbeAction:
-        assert(false)
+        act_shoot_probe_action(action)
     case NoAction:
     case:
     }
@@ -193,4 +192,18 @@ shoot_probe_action :: proc(actor: ^Actor, dir: Direction) -> (out: Action) {
     out.variant = ShootProbeAction{startpos=actor.pos, endpos=pos, hit=hit, dir = dir}
 
     return
+}
+
+animate_shoot_probe_action :: proc(action: Action, prog: f32) -> f32 {
+    SHOOT_STEP_TIME :: 0.15
+    shoot := action.variant.(ShootProbeAction)
+
+    delta := linalg.to_f32(shoot.endpos - shoot.startpos)
+    dist := linalg.length(delta)
+
+    return dist * SHOOT_STEP_TIME
+}
+
+act_shoot_probe_action :: proc(action: Action) {
+
 }

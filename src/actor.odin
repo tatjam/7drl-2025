@@ -29,6 +29,7 @@ SubscaleMap :: struct {
     cortex: ^Actor,
     engines: [dynamic]^Actor,
     radars: [dynamic]^Actor,
+    factories: [dynamic]^Actor,
 }
 
 SubscaleActor :: struct {
@@ -341,9 +342,11 @@ create_subscale_map :: proc(for_actor: ^Actor, fname: string, sets: DungeonSetti
     cortex : ^Actor
     engines : [dynamic]^Actor
     radars : [dynamic]^Actor
+    factories : [dynamic]^Actor
     CORTEX_ID :: [3]u8{0, 0, 255}
     MOTOR_ID :: [3]u8{255, 0, 0}
     RADAR_ID :: [3]u8{0, 255, 0}
+    FACTORY_ID :: [3]u8{255, 255, 0}
 
     cable_map := make_dynamic_array_len([dynamic]bool, worldmap.width * worldmap.height)
     defer delete(cable_map)
@@ -363,6 +366,12 @@ create_subscale_map :: proc(for_actor: ^Actor, fname: string, sets: DungeonSetti
             clear_rectangle(&fullscale.subscale.tmap, tag.pos, [2]int{2,2})
             set_footprint(&fullscale.subscale.tmap, tag.pos, [2]int{-1,-1}, [2]int{1,0})
             append(&radars, radar)
+        } else if tag.tag == FACTORY_ID {
+            factory := create_factory(game, tag.pos, for_actor, rl.GetRandomValue(0, 3))
+            clear_rectangle(&fullscale.subscale.tmap, tag.pos, [2]int{2,2})
+            set_footprint(&fullscale.subscale.tmap, tag.pos, [2]int{-1,-1}, [2]int{1,0})
+            append(&factories, factory)
+
         }
     }
 
@@ -378,7 +387,13 @@ create_subscale_map :: proc(for_actor: ^Actor, fname: string, sets: DungeonSetti
     for radar in radars {
         cable_end, cable_end_in := engine_cable_location(radar)
         nwire := run_cable(worldmap, frontier[:], cable_start, cable_end,
-        cable_start_in, cable_end_in, cortex, radar, cable_map[:])
+            cable_start_in, cable_end_in, cortex, radar, cable_map[:])
+        append(&wires, nwire)
+    }
+    for factory in factories {
+        cable_end, cable_end_in := factory_cable_location(factory)
+        nwire := run_cable(worldmap, frontier[:], cable_start, cable_end,
+            cable_start_in, cable_end_in, cortex, factory, cable_map[:])
         append(&wires, nwire)
     }
 
@@ -407,6 +422,7 @@ create_subscale_map :: proc(for_actor: ^Actor, fname: string, sets: DungeonSetti
     fullscale.subscale.cortex = cortex
     fullscale.subscale.engines = engines
     fullscale.subscale.radars = radars
+    fullscale.subscale.factories = factories
     fullscale.subscale.wire = wires
     delete(actor_wall)
     return frontier
@@ -417,6 +433,7 @@ destroy_subscale_map :: proc(for_actor: ^Actor) {
     fullscale, is_fullscale := &for_actor.scale_kind.(FullscaleActor)
     if !is_fullscale do return
 
+    delete(fullscale.subscale.factories)
     delete(fullscale.subscale.radars)
     delete(fullscale.subscale.engines)
     delete(fullscale.subscale.wire)
@@ -518,6 +535,22 @@ radar_cable_location :: proc(radar: ^Actor) -> (outer: [2]int, inner: [2]int) {
     return radar.pos, radar.pos
 }
 
+factory_cable_location :: proc(factory: ^Actor) -> (outer: [2]int, inner: [2]int) {
+
+    switch factory.dir {
+    case .NORTH:
+        return factory.pos + [2]int{0, -2}, factory.pos + [2]int{0, -1}
+    case .EAST:
+        return factory.pos + [2]int{2, 0}, factory.pos + [2]int{1, 0}
+    case .SOUTH:
+        return factory.pos + [2]int{0, 1}, factory.pos + [2]int{0, 0}
+    case .WEST:
+        return factory.pos + [2]int{-2, 0}, factory.pos + [2]int{-1, 0}
+    }
+    assert(false, "invalid factory direction")
+    return factory.pos, factory.pos
+}
+
 create_engine :: proc(game: ^GameState, pos: [2]int, inside: ^Actor, orient: c.int) -> ^Actor {
     actor := game_create_npc(game)
     actor.class = {.ENVIRONMENT}
@@ -581,6 +614,27 @@ create_sentinel :: proc(game: ^GameState, pos: [2]int) -> ^Actor {
     defer delete(frontier)
 
     fs.subscale.tex = render_subscale_tilemap(fs.subscale.tmap, frontier[:])
+
+    return actor
+}
+
+create_factory :: proc(game: ^GameState, pos: [2]int, inside: ^Actor, orient: c.int) -> ^Actor {
+    actor := game_create_npc(game)
+    actor.class = {.ENVIRONMENT}
+
+
+    actor.pos = pos
+    actor.ignore_dir_graphics = true
+    actor.dir = Direction(orient)
+    actor.alive = true
+    actor.sprite = get_texture(&game.assets, "res/agents/factory.png")
+    w := actor.sprite.width / 4
+    actor.sprite_rect = rl.Rectangle{
+        f32(orient * w), 0,
+        f32(w), f32(actor.sprite.height)}
+    actor.sprite_size = [2]int{3, 2}
+
+    actor.scale_kind = SubscaleActor{subscale_of = inside}
 
     return actor
 }
