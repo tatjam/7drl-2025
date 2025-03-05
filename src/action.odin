@@ -168,10 +168,26 @@ ShootProbeAction :: struct {
     startpos: [2]int,
     endpos: [2]int,
     hit: ^Actor,
-    dir: Direction,
+}
+
+shoot_probe_action_return :: proc(actor: ^Actor) -> (out: Action) {
+    out.by_actor = actor
+    if actor == actor.in_game.focus_subscale do return no_action()
+
+    out.need_see = make([dynamic][2]int, context.temp_allocator)
+    append(&out.need_see, actor.pos)
+
+    out.variant = ShootProbeAction{startpos=actor.in_game.focus_subscale.pos, endpos=actor.pos, hit=actor}
+
+    return
+
 }
 
 shoot_probe_action :: proc(actor: ^Actor, dir: Direction) -> (out: Action) {
+    if actor.in_game.focus_subscale != actor {
+        return shoot_probe_action_return(actor)
+    }
+
     out.by_actor = actor
     out.need_see = make([dynamic][2]int, context.temp_allocator)
     append(&out.need_see, actor.pos)
@@ -190,7 +206,7 @@ shoot_probe_action :: proc(actor: ^Actor, dir: Direction) -> (out: Action) {
         if hit != nil do break
     }
 
-    out.variant = ShootProbeAction{startpos=actor.pos, endpos=pos, hit=hit, dir = dir}
+    out.variant = ShootProbeAction{startpos=actor.pos, endpos=pos, hit=hit}
 
     return
 }
@@ -228,7 +244,12 @@ act_shoot_probe_action :: proc(action: Action) {
     if shoot.hit == nil {
         game_push_message(game, "The scale probe doesn't hit a valid target")
     } else {
-        game_push_message(game, "The scale probe hits a target!")
+        if shoot.hit == &game.hero {
+            game_push_message(game, "The scale probe returns!")
+        } else {
+            game_push_message(game, "The scale probe hits a target!")
+        }
+        game.focus_subscale = shoot.hit
     }
 
 }
