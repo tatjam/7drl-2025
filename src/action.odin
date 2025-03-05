@@ -201,7 +201,7 @@ animate_shoot_probe_action :: proc(action: Action, prog: f32) -> f32 {
 
     game := action.by_actor.in_game
 
-    if prog == 0.0 {
+    if len(game.fx) == 0 {
         fx := new(ActionFX)
         fx.pos = linalg.to_f32(shoot.startpos)
         fx.sprite_tex = get_texture(&game.assets, "res/fx/probe.png")
@@ -221,5 +221,14 @@ animate_shoot_probe_action :: proc(action: Action, prog: f32) -> f32 {
 }
 
 act_shoot_probe_action :: proc(action: Action) {
+    shoot := action.variant.(ShootProbeAction)
+    game := action.by_actor.in_game
+
+
+    if shoot.hit == nil {
+        game_push_message(game, "The scale probe doesn't hit a valid target")
+    } else {
+        game_push_message(game, "The scale probe hits a target!")
+    }
 
 }

@@ -90,6 +90,7 @@ destroy_game :: proc(game: ^GameState) {
     }
     delete(game.statuslog)
     delete(game.npcs)
+    delete(game.fx)
     destroy_assets(&game.assets)
 }
 
@@ -147,14 +148,15 @@ game_update_anim :: proc(game: ^GameState) {
     assert(is_ok)
 
     if game.anim_progress >= animate_action(action, game.anim_progress) {
-        // Carry out the action itself
-        act_action(action)
-        game.anim_progress = -1.0
-
         for fx in game.fx {
             free(fx)
         }
         clear(&game.fx)
+
+        // Carry out the action itself
+        act_action(action)
+        game.anim_progress = -1.0
+
     }
 
     game.anim_progress += rl.GetFrameTime()
