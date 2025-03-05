@@ -4,12 +4,34 @@ import rl "vendor:raylib"
 import "core:math/linalg"
 import "core:math/rand"
 import "core:c"
+import "core:log"
 
 Direction :: enum {
     NORTH,
     EAST,
     SOUTH,
     WEST
+}
+
+oppositedir :: proc(dir: Direction) -> Direction {
+    switch dir {
+    case .NORTH:
+        return .SOUTH
+    case .EAST:
+        return .WEST
+    case .SOUTH:
+        return .NORTH
+    case .WEST:
+        return .EAST
+    }
+    assert(false)
+    return .NORTH
+}
+
+// There's likely a cleaner way to do this lol
+entrydir :: proc(movedir: Direction, rot: Direction) -> Direction {
+    relativedir := Direction(abs(int(movedir - rot) % 4))
+    return oppositedir(relativedir)
 }
 
 SubscaleWire :: struct {
@@ -149,14 +171,13 @@ create_hero :: proc(game: ^GameState, pos: [2]int) {
     out.scale_kind = FullscaleActor{}
     fs := &out.scale_kind.(FullscaleActor)
 
-    frontier := create_subscale_map(out, "res/agents/player_interior.png", DungeonSettings{
+    create_subscale_map(out, "res/agents/player_interior.png", DungeonSettings{
         max_room_size = [2]int{6, 6},
         min_room_size = [2]int{3, 3},
         num_rooms = 14,
     })
-    defer delete(frontier)
 
-    fs.subscale.tex = render_subscale_tilemap(fs.subscale.tmap, frontier[:])
+    fs.subscale.tex = render_subscale_tilemap(fs.subscale.tmap)
 
     return
 }
@@ -183,6 +204,9 @@ create_probe :: proc(game: ^GameState, pos: [2]int) {
 take_turn_hero :: proc(actor: ^HeroActor) -> Action {
     if rl.IsKeyPressed(.P) {
         return shoot_probe_action(actor, actor.dir)
+    } else if rl.IsKeyPressed(.SPACE) {
+        actor.in_game.playing_subscale = true
+        return no_action()
     }
     // HJKL turning / motion
     // Shift+HJKL turning only
@@ -210,6 +234,29 @@ take_turn_hero :: proc(actor: ^HeroActor) -> Action {
     return no_action()
 }
 
+take_turn_probe :: proc(actor: ^ProbeActor) -> Action {
+    if rl.IsKeyPressed(.SPACE) {
+        actor.in_game.playing_subscale = false
+        return no_action()
+    }
+
+    // HJKL motion
+    dir : Direction
+
+    if rl.IsKeyPressed(.H) {
+        dir = .WEST
+    } else if rl.IsKeyPressed(.J) {
+        dir = .SOUTH
+    } else if rl.IsKeyPressed(.K) {
+        dir = .NORTH
+    } else if rl.IsKeyPressed(.L) {
+        dir = .EAST
+    } else do return no_action()
+
+
+    return move_action(actor, dir, 1)
+}
+
 take_turn_monster :: proc(actor: ^NPCActor) -> Action {
     return no_action()
 }
@@ -217,8 +264,7 @@ take_turn_monster :: proc(actor: ^NPCActor) -> Action {
 
 
 
-create_subscale_map :: proc(for_actor: ^Actor, fname: string, sets: DungeonSettings) ->
-    [dynamic]bool {
+create_subscale_map :: proc(for_actor: ^Actor, fname: string, sets: DungeonSettings) {
 
     fullscale, is_fullscale := &for_actor.scale_kind.(FullscaleActor)
     assert(is_fullscale)
@@ -333,7 +379,7 @@ create_subscale_map :: proc(for_actor: ^Actor, fname: string, sets: DungeonSetti
     defer delete(tags)
 
     dungeon, dungeon_rooms, frontier := dungeon_gen(actor_wall[:], width, sets)
-    fullscale.subscale.tmap = create_tilemap(dungeon, frontier[:], width, dungeon_rooms)
+    fullscale.subscale.tmap = create_tilemap(dungeon, frontier, width, dungeon_rooms)
     tex := get_texture(&for_actor.in_game.assets, "res/smalltiles.png")
     fullscale.subscale.tmap.tileset = tex
     fullscale.subscale.tmap.tileset_size = [2]int{int(tex.width) / 3, int(tex.height) / 4}
@@ -428,7 +474,6 @@ create_subscale_map :: proc(for_actor: ^Actor, fname: string, sets: DungeonSetti
     fullscale.subscale.factories = factories
     fullscale.subscale.wire = wires
     delete(actor_wall)
-    return frontier
 
 }
 
@@ -609,14 +654,13 @@ create_sentinel :: proc(game: ^GameState, pos: [2]int) -> ^Actor {
     actor.scale_kind = FullscaleActor{}
     fs := &actor.scale_kind.(FullscaleActor)
 
-    frontier := create_subscale_map(actor, "res/agents/sentinel_interior.png", DungeonSettings{
+    create_subscale_map(actor, "res/agents/sentinel_interior.png", DungeonSettings{
         max_room_size = [2]int{3, 3},
         min_room_size = [2]int{2, 2},
         num_rooms = 6,
     })
-    defer delete(frontier)
 
-    fs.subscale.tex = render_subscale_tilemap(fs.subscale.tmap, frontier[:])
+    fs.subscale.tex = render_subscale_tilemap(fs.subscale.tmap)
 
     return actor
 }

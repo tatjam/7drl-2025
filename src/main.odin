@@ -48,9 +48,9 @@ main :: proc() {
     })
     defer destroy_tilemap(&game.worldmap)
 
-    startpos := tilemap_find_spawn_pos(game.worldmap)
+    startpos := tilemap_find_spawn_pos(&game, nil)
     create_hero(&game, startpos)
-    probestartpos := tilemap_find_spawn_pos(game.hero.scale_kind.(FullscaleActor).subscale.tmap)
+    probestartpos := tilemap_find_spawn_pos(&game, &game.hero)
     create_probe(&game, probestartpos)
     game.focus_subscale = &game.hero
 

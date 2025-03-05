@@ -3,6 +3,7 @@ package src
 import rl "vendor:raylib"
 import "core:math/linalg"
 import "core:math"
+import "core:log"
 
 // Default action does nothing
 Action :: struct {
@@ -58,17 +59,20 @@ move_action :: proc(actor: ^Actor, dir: Direction, steps: int) -> Action {
     endpos := actor.pos
     visited := make([dynamic][2]int, context.temp_allocator)
 
+    subscale, is_subscale := actor.scale_kind.(SubscaleActor)
+    wmap := actor.in_game.worldmap
+    if is_subscale {
+        wmap = subscale.subscale_of.scale_kind.(FullscaleActor).subscale.tmap
+    }
+
     for ;i <= steps; i+=1 {
         np = np + delta * i
-        wmap := &actor.in_game.worldmap
 
         if np.x < 0 || np.y < 0 || np.x >= wmap.width || np.y >= wmap.height {
             break
         }
 
-        if wmap.walls[np.y * wmap.width + np.x] {
-            break
-        }
+        if tilemap_tile_collides(wmap, np) do break
 
         endpos = np
         append(&visited, np)
@@ -200,7 +204,7 @@ shoot_probe_action :: proc(actor: ^Actor, dir: Direction) -> (out: Action) {
     for {
         pos += dir_to_delta(dir)
         if pos.x < 0 || pos.y < 0 || pos.x > w || pos.y > h do break
-        if actor.in_game.worldmap.walls[pos.y * w + pos.x] do break
+        if tilemap_tile_collides(actor.in_game.worldmap, pos) do break
 
         hit = get_actor_at(actor.in_game, pos, nil)
         if hit != nil do break
@@ -244,11 +248,34 @@ act_shoot_probe_action :: proc(action: Action) {
     if shoot.hit == nil {
         game_push_message(game, "The scale probe doesn't hit a valid target")
     } else {
+        // Find entrypoint from direction
+        delta := linalg.to_f32(shoot.endpos - shoot.startpos)
+        dir := Direction.NORTH
+        if abs(delta.x) > abs(delta.y) {
+            if delta.x > 0 {
+                dir = .EAST
+            } else {
+                dir = .WEST
+            }
+        } else {
+            if delta.y > 0 {
+                dir = .SOUTH
+            } else {
+                dir = .NORTH
+            }
+        }
+        // But ofcourse, entity is rotated
+        dir = entrydir(dir, shoot.hit.dir)
+
         if shoot.hit == &game.hero {
             game_push_message(game, "The scale probe returns!")
         } else {
             game_push_message(game, "The scale probe hits a target!")
         }
+        pos :=  tilemap_find_spawn_pos_dir(game, shoot.hit, dir)
+        subs := &game.probe.scale_kind.(SubscaleActor)
+        subs.subscale_of = shoot.hit
+        game.probe.pos = pos
         game.focus_subscale = shoot.hit
     }
 

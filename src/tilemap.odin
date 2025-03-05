@@ -28,6 +28,7 @@ MapEdge :: struct {
 
 Tilemap :: struct {
     walls: [dynamic]bool,
+    outside: [dynamic]bool,
     width: int,
     height: int,
     rooms: [dynamic]DungeonRoom,
@@ -42,15 +43,16 @@ Tilemap :: struct {
     tile_tint: [dynamic]rl.Color,
 }
 
-// We take ownership of walls
-create_tilemap :: proc(walls: [dynamic]bool, exclude: []bool, width: int,
+// We take ownership of walls and exclude
+create_tilemap :: proc(walls: [dynamic]bool, exclude: [dynamic]bool, width: int,
     rooms: [dynamic]DungeonRoom) -> (out: Tilemap) {
 
     out.walls = walls
     out.width = width
     out.height = len(walls) / width
     out.rooms = rooms
-    mesh_world_tilemap(&out, exclude)
+    out.outside = exclude
+    mesh_world_tilemap(&out)
     return out
 }
 
@@ -61,13 +63,10 @@ destroy_tilemap :: proc(tm: ^Tilemap) {
     delete(tm.tile_tint)
     delete(tm.tile_to_tex)
     delete(tm.tile_rot)
+    delete(tm.outside)
 }
 
-mesh_world_tilemap :: proc(tm: ^Tilemap, exclude: []bool = nil) {
-    if exclude != nil {
-        assert(len(exclude) == len(tm.walls))
-    }
-
+mesh_world_tilemap :: proc(tm: ^Tilemap) {
     // x represents any, 0 represents no wall, 1 represents wall
     // A left edge is generated at given stencil
     // [X][X][X]
@@ -81,9 +80,7 @@ mesh_world_tilemap :: proc(tm: ^Tilemap, exclude: []bool = nil) {
                 continue
             }
             if tm.walls[yi * tm.width + xi] do continue
-            if exclude != nil {
-                if exclude[yi*tm.width + xi] do continue
-            }
+            if tm.outside[yi*tm.width + xi] do continue
 
             if tm.walls[(yi-1)*tm.width + xi] {
                 edge := MapEdge{
@@ -225,9 +222,104 @@ tile_center :: proc(pos: [2]int) -> [2]f32 {
     return [2]f32{f32(pos.x) + 0.5, f32(pos.y) + 0.5}
 }
 
-tilemap_find_spawn_pos :: proc(tm: Tilemap) -> [2]int {
-    room := rand.choice(tm.rooms[:])
-    return room.center
+tilemap_find_spawn_pos :: proc(game:^GameState, subscale: ^Actor) -> [2]int {
+    tm := tilemap_get_map(game, subscale)
+
+    for {
+        room := rand.choice(tm.rooms[:])
+        if get_actor_at(game, room.center, subscale) != nil do continue
+        return room.center
+    }
+
+    assert(false)
+    return [2]int{0, 0}
+}
+
+tilemap_get_map :: proc(game: ^GameState, subscale: ^Actor) -> ^Tilemap {
+    if subscale == nil {
+        return &game.worldmap
+    } else {
+        fullscale := &subscale.scale_kind.(FullscaleActor)
+        return &fullscale.subscale.tmap
+    }
+}
+
+tilemap_scan_free :: proc(game: ^GameState, subscale: ^Actor, dir: Direction, fixed: int) -> (pos: [2]int, anyfree: bool) {
+    tm := tilemap_get_map(game, subscale)
+
+    m: int
+    op: [2]int
+    dp: [2]int
+    if dir == .NORTH || dir == .SOUTH {
+        // We must scan a horizontal
+        m = tm.width
+        op = [2]int{tm.width / 2, fixed}
+        dp = [2]int{1, 0}
+    } else {
+        // We must scan a vertical
+        m = tm.height
+        op = [2]int{fixed, tm.height / 2}
+        dp = [2]int{0, 1}
+    }
+
+    p := op
+
+    for i := m/2; i < m; i += 1 {
+        tile := tilemap_tile_collides(tm^, p)
+        if !tile {
+           if get_actor_at(game, p, subscale) == nil {
+               return p, true
+           }
+        }
+        p += dp
+    }
+
+    p = op
+
+    for i := 0; i < m/2; i += 1 {
+        tile := tilemap_tile_collides(tm^, p)
+        if !tile {
+            if get_actor_at(game, p, subscale) == nil {
+                return p, true
+            }
+        }
+        p -= dp
+    }
+
+    return [2]int{0, 0}, false
+}
+
+tilemap_tile_collides :: proc(tm: Tilemap, tile: [2]int) -> bool {
+    return tm.walls[tile.y * tm.width + tile.x] || tm.outside[tile.y * tm.width + tile.x]
+}
+
+tilemap_find_spawn_pos_dir :: proc(game: ^GameState, subscale: ^Actor, dir: Direction) -> [2]int {
+    tm := tilemap_get_map(game, subscale)
+
+    if dir == .NORTH {
+        for y := 0; y < tm.height; y += 1 {
+            p := tilemap_scan_free(game, subscale, dir, y) or_continue
+            return p
+        }
+    } else if dir == .EAST {
+        for x := tm.width - 1; x >= 0; x -= 1 {
+            p := tilemap_scan_free(game, subscale, dir, x) or_continue
+            return p
+        }
+    } else if dir == .SOUTH {
+        for y := tm.height - 1; y >= 0; y -= 1 {
+            p := tilemap_scan_free(game, subscale, dir, y) or_continue
+            return p
+        }
+    } else {
+        for x := 0; x < tm.width; x += 1 {
+            p := tilemap_scan_free(game, subscale, dir, x) or_continue
+            return p
+        }
+    }
+
+    assert(false)
+    return [2]int{0, 0}
 }
 
 draw_world_tilemap :: proc(tm: Tilemap) {
@@ -243,7 +335,7 @@ draw_world_tilemap :: proc(tm: Tilemap) {
 }
 
 // Renders to a texture. Only call once when generating the actor
-render_subscale_tilemap :: proc(tm: Tilemap, frontier: []bool) -> rl.RenderTexture2D {
+render_subscale_tilemap :: proc(tm: Tilemap) -> rl.RenderTexture2D {
     out := rl.LoadRenderTexture(
         c.int(tm.width * tm.tileset_size.x), c.int(tm.height * tm.tileset_size.y))
     rl.BeginTextureMode(out)
@@ -251,7 +343,7 @@ render_subscale_tilemap :: proc(tm: Tilemap, frontier: []bool) -> rl.RenderTextu
 
     for y:=0; y < tm.height; y+=1 {
         for x:=0; x < tm.width; x+=1 {
-            if frontier[y * tm.width + x] do continue
+            if tm.outside[y * tm.width + x] do continue
             tpos := tm.tile_to_tex[y * tm.width + x]
             tile := rl.Rectangle{
                 f32(tpos.x * tm.tileset_size.x), f32(tpos.y * tm.tileset_size.y),

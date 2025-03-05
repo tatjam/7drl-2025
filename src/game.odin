@@ -34,6 +34,8 @@ GameState :: struct {
     cur_action: Maybe(Action),
     anim_progress: f32,
 
+    playing_subscale: bool,
+
     show_help: bool,
 
     // Cleared at the end of the action animation
@@ -166,7 +168,12 @@ game_update_turn :: proc(game: ^GameState) {
     for {
         if game.turni == -1 {
             // Progress in turn
-            hero_action := take_turn_hero(&game.hero)
+            hero_action: Action
+            if game.playing_subscale {
+                hero_action = take_turn_probe(&game.probe)
+            } else {
+                hero_action = take_turn_hero(&game.hero)
+            }
             _, is_none := hero_action.variant.(NoAction)
             if is_none do break // Continue processing user input
             game.turni += 1

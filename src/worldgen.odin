@@ -547,8 +547,7 @@ create_world :: proc(width, height: int, sets: DungeonSettings) -> Tilemap {
 
     dungeon, dungeon_rooms, frontier := dungeon_gen(empty_wall[:], width, sets)
     delete(empty_wall)
-    worldmap := create_tilemap(dungeon, frontier[:], width, dungeon_rooms)
-    delete(frontier)
+    worldmap := create_tilemap(dungeon, frontier, width, dungeon_rooms)
 
     return worldmap
 }
