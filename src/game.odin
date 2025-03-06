@@ -26,7 +26,7 @@ GameState :: struct {
 
     hero: HeroActor,
     probe: ProbeActor,
-    npcs: [dynamic]^NPCActor,
+    npcs: [dynamic]^Actor,
     turni: int,
 
     focus_subscale: ^Actor,
@@ -88,7 +88,6 @@ destroy_game :: proc(game: ^GameState) {
     destroy_actor(&game.hero)
     for npc in game.npcs {
         destroy_actor(npc)
-        free(npc)
     }
     delete(game.statuslog)
     delete(game.npcs)
@@ -118,6 +117,7 @@ game_do_action :: proc(game: ^GameState, action: Action) -> bool {
                 break
             }
         }
+        can_see_any |= action.force_animate
 
         if can_see_any {
             game.anim_progress = 0.0
@@ -159,9 +159,10 @@ game_update_anim :: proc(game: ^GameState) {
         act_action(action)
         game.anim_progress = -1.0
 
+    } else {
+        game.anim_progress += rl.GetFrameTime()
     }
 
-    game.anim_progress += rl.GetFrameTime()
 }
 
 game_update_turn :: proc(game: ^GameState) {
@@ -188,18 +189,20 @@ game_update_turn :: proc(game: ^GameState) {
                 game.turni = -1
                 break
             } else {
-                action := take_turn_monster(game.npcs[game.turni])
-                if game_do_action(game, action) {
-                    break
-                } else {
-                    act_action(action)
-                }
+                action := take_turn(game.npcs[game.turni])
+
                 game.npcs[game.turni].actions_taken += 1
 
                 if game.npcs[game.turni].actions_taken > game.npcs[game.turni].actions_per_turn {
                     game.npcs[game.turni].actions_taken = 0
                     game.turni += 1
                 }
+                if game_do_action(game, action) {
+                    break
+                } else {
+                    act_action(action)
+                }
+
             }
         }
     }
@@ -259,12 +262,13 @@ game_draw_game :: proc(game: ^GameState) {
 
 }
 
-game_create_npc :: proc(game: ^GameState) -> ^Actor {
+game_create_npc :: proc(game: ^GameState, $T: typeid) -> ^T {
     id := len(game.npcs)
 
-    actor := new(NPCActor)
+    actor := new(T)
+    actor.kind = actor
     actor.in_game = game
-    append(&game.npcs, actor)
+    append(&game.npcs, (^Actor)(actor))
     return actor
 }
 
@@ -303,6 +307,10 @@ game_draw_subscale :: proc(game: ^GameState) {
     rl.DrawTexturePro(subs.tex.texture,
     source, target, [2]f32{f32(stmap.width) * 0.5, f32(stmap.height) * 0.5}, 180.0, rl.WHITE
     )
+
+    for &wire in subs.wire {
+        subscale_wire_draw(&wire)
+    }
 
     // Draw the actors
     if game.probe.scale_kind.(SubscaleActor).subscale_of == game.focus_subscale {

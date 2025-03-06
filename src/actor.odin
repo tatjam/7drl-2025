@@ -6,6 +6,8 @@ import "core:math/rand"
 import "core:c"
 import "core:log"
 
+SUBSCALE_ACTIONS_PER_TURN :: 8
+
 Direction :: enum {
     NORTH,
     EAST,
@@ -35,11 +37,41 @@ entrydir :: proc(movedir: Direction, rot: Direction) -> Direction {
 }
 
 SubscaleWire :: struct {
-    start_actor: ^Actor,
-    end_actor: ^Actor,
+    start_actor: ^OrganActor,
+    end_actor: ^OrganActor,
     steps: [dynamic][2]int,
     // Progress along length of wire
     charges: [dynamic]int,
+    charge_tex: rl.Texture2D,
+}
+
+subscale_wire_update :: proc(wire: ^SubscaleWire) {
+    if wire.start_actor.energy > 0 {
+        append(&wire.charges, 0)
+        wire.start_actor.energy -= 1
+    }
+
+    for i := 0; i < len(wire.charges); {
+        if wire.charges[i] > len(wire.steps) {
+            unordered_remove(&wire.charges, i)
+            wire.end_actor.energy += 1
+        } else {
+            wire.charges[i] += 1
+            i += 1
+        }
+    }
+}
+
+subscale_wire_draw :: proc(wire: ^SubscaleWire) {
+    scale := 1.0 / f32(wire.charge_tex.width)
+
+    for charge in wire.charges {
+        if charge < len(wire.steps) && charge > 0 {
+            pos := linalg.to_f32(wire.steps[charge])
+
+            rl.DrawTextureEx(wire.charge_tex, pos, 0.0, scale, rl.WHITE)
+        }
+    }
 }
 
 // If we are not a subscale actor, we must have
@@ -48,10 +80,11 @@ SubscaleMap :: struct {
     tmap: Tilemap,
     tex: rl.RenderTexture,
     wire: [dynamic]SubscaleWire,
-    cortex: ^Actor,
-    engines: [dynamic]^Actor,
-    radars: [dynamic]^Actor,
-    factories: [dynamic]^Actor,
+
+    cortex: ^OrganActor,
+    engines: [dynamic]^OrganActor,
+    radars: [dynamic]^OrganActor,
+    factories: [dynamic]^OrganActor,
 }
 
 SubscaleActor :: struct {
@@ -95,6 +128,12 @@ Actor :: struct {
         FullscaleActor,
         SubscaleActor
     },
+
+    kind: union {
+        ^HeroActor,
+        ^NPCActor,
+        ^OrganActor,
+    }
 }
 
 // The hero is the player controllable entity.
@@ -139,6 +178,18 @@ NPCActor :: struct {
     using base: Actor
 }
 
+OrganKind :: enum {
+    CORTEX,
+    ENGINE,
+    RADAR,
+    FACTORY
+}
+OrganActor :: struct {
+    energy: int,
+    organ_kind: OrganKind,
+    using base: Actor
+}
+
 // Returns CENTER of the actor. If the actor size is odd, this is clearly
 // defined to be a tile center, otherwise, it's offset to positive x / y
 // such that the center lies on a tile center
@@ -155,6 +206,14 @@ actor_get_draw_pos :: proc(actor: Actor) -> [2]f32 {
 
 destroy_actor :: proc(actor: ^Actor) {
     destroy_subscale_map(actor)
+    switch v in actor.kind {
+        case ^NPCActor:
+            free(v)
+        case ^OrganActor:
+            free(v)
+        case ^HeroActor:
+            assert(false)
+    }
 }
 
 create_hero :: proc(game: ^GameState, pos: [2]int) {
@@ -261,6 +320,38 @@ take_turn_monster :: proc(actor: ^NPCActor) -> Action {
     return no_action()
 }
 
+take_turn_organ :: proc(actor: ^OrganActor) -> Action {
+    if actor.organ_kind == .CORTEX {
+        if actor.actions_taken == 0 {
+            actor.energy = 16
+        }
+
+        for &wire in actor.scale_kind.(SubscaleActor).subscale_of.scale_kind.(FullscaleActor).subscale.wire {
+            if wire.start_actor == actor {
+                subscale_wire_update(&wire)
+            }
+        }
+
+        if actor.scale_kind.(SubscaleActor).subscale_of == actor.in_game.focus_subscale && actor.in_game.playing_subscale {
+            return dummy_animate_action(actor, 0.01)
+        }
+    }
+    return no_action()
+}
+
+take_turn :: proc(actor: ^Actor) -> Action {
+    switch v in actor.kind {
+        case ^HeroActor:
+            assert(false, "Use take_turn_hero directly")
+            return take_turn_hero(v)
+        case ^NPCActor:
+            return take_turn_monster(v)
+        case ^OrganActor:
+            return take_turn_organ(v)
+    }
+
+    return no_action()
+}
 
 
 
@@ -270,10 +361,9 @@ create_subscale_map :: proc(for_actor: ^Actor, fname: string, sets: DungeonSetti
     assert(is_fullscale)
 
     run_cable :: proc(inmap: ^Tilemap, frontier: []bool, from, to: [2]int,
-        connect_start, connect_end: [2]int, from_act, to_act: ^Actor, cable_map: []bool) -> (out: SubscaleWire) {
+        connect_start, connect_end: [2]int, from_act, to_act: ^OrganActor, cable_map: []bool) -> (out: SubscaleWire) {
 
         path := astar_wall(from, to, inmap.walls[:], inmap.width, max(int), 0, frontier)
-        defer delete(path)
         if len(path) == 0 {
             delete(path)
             path = astar_wall(from, to, inmap.walls[:], inmap.width, 100, 0, frontier)
@@ -285,6 +375,7 @@ create_subscale_map :: proc(for_actor: ^Actor, fname: string, sets: DungeonSetti
         out.steps = path
         out.start_actor = from_act
         out.end_actor = to_act
+        out.charge_tex = get_texture(&from_act.in_game.assets, "res/charge.png")
 
         cable_map[connect_start.y * inmap.width + connect_start.x] = true
         cable_map[connect_end.y * inmap.width + connect_end.x] = true
@@ -388,10 +479,10 @@ create_subscale_map :: proc(for_actor: ^Actor, fname: string, sets: DungeonSetti
 
     // Run wires and build rooms for organs
     game := for_actor.in_game
-    cortex : ^Actor
-    engines : [dynamic]^Actor
-    radars : [dynamic]^Actor
-    factories : [dynamic]^Actor
+    cortex : ^OrganActor
+    engines : [dynamic]^OrganActor
+    radars : [dynamic]^OrganActor
+    factories : [dynamic]^OrganActor
     CORTEX_ID :: [3]u8{0, 0, 255}
     MOTOR_ID :: [3]u8{255, 0, 0}
     RADAR_ID :: [3]u8{0, 255, 0}
@@ -481,6 +572,10 @@ destroy_subscale_map :: proc(for_actor: ^Actor) {
     fullscale, is_fullscale := &for_actor.scale_kind.(FullscaleActor)
     if !is_fullscale do return
 
+    for wire in fullscale.subscale.wire {
+        delete(wire.steps)
+    }
+
     delete(fullscale.subscale.factories)
     delete(fullscale.subscale.radars)
     delete(fullscale.subscale.engines)
@@ -517,9 +612,10 @@ draw_actor :: proc(actor: ^Actor) {
 
 }
 
-create_cortex :: proc(game: ^GameState, pos: [2]int, inside: ^Actor, orient: c.int) -> ^Actor {
-    actor := game_create_npc(game)
+create_cortex :: proc(game: ^GameState, pos: [2]int, inside: ^Actor, orient: c.int) -> ^OrganActor {
+    actor := game_create_npc(game, OrganActor)
     actor.class = {.ENVIRONMENT}
+    actor.actions_per_turn = SUBSCALE_ACTIONS_PER_TURN
 
     actor.pos = pos
     actor.ignore_dir_graphics = true
@@ -599,9 +695,10 @@ factory_cable_location :: proc(factory: ^Actor) -> (outer: [2]int, inner: [2]int
     return factory.pos, factory.pos
 }
 
-create_engine :: proc(game: ^GameState, pos: [2]int, inside: ^Actor, orient: c.int) -> ^Actor {
-    actor := game_create_npc(game)
+create_engine :: proc(game: ^GameState, pos: [2]int, inside: ^Actor, orient: c.int) -> ^OrganActor {
+    actor := game_create_npc(game, OrganActor)
     actor.class = {.ENVIRONMENT}
+    actor.organ_kind = .ENGINE
 
 
     actor.pos = pos
@@ -620,9 +717,10 @@ create_engine :: proc(game: ^GameState, pos: [2]int, inside: ^Actor, orient: c.i
     return actor
 }
 
-create_radar :: proc(game: ^GameState, pos: [2]int, inside: ^Actor, orient: c.int) -> ^Actor {
-    actor := game_create_npc(game)
+create_radar :: proc(game: ^GameState, pos: [2]int, inside: ^Actor, orient: c.int) -> ^OrganActor {
+    actor := game_create_npc(game, OrganActor)
     actor.class = {.ENVIRONMENT}
+    actor.organ_kind = .RADAR
 
 
     actor.pos = pos
@@ -642,7 +740,7 @@ create_radar :: proc(game: ^GameState, pos: [2]int, inside: ^Actor, orient: c.in
 }
 
 create_sentinel :: proc(game: ^GameState, pos: [2]int) -> ^Actor {
-    actor := game_create_npc(game)
+    actor := game_create_npc(game, NPCActor)
     actor.class = {.HOSTILE}
     actor.pos = pos
     actor.dir = .NORTH
@@ -665,9 +763,10 @@ create_sentinel :: proc(game: ^GameState, pos: [2]int) -> ^Actor {
     return actor
 }
 
-create_factory :: proc(game: ^GameState, pos: [2]int, inside: ^Actor, orient: c.int) -> ^Actor {
-    actor := game_create_npc(game)
+create_factory :: proc(game: ^GameState, pos: [2]int, inside: ^Actor, orient: c.int) -> ^OrganActor {
+    actor := game_create_npc(game, OrganActor)
     actor.class = {.ENVIRONMENT}
+    actor.organ_kind = .FACTORY
 
 
     actor.pos = pos

@@ -9,7 +9,8 @@ import "core:log"
 Action :: struct {
     by_actor: ^Actor,
     need_see: [dynamic][2]int,
-    variant: union{NoAction, MoveAction, TurnAction, ShootProbeAction}
+    force_animate: bool,
+    variant: union{NoAction, MoveAction, TurnAction, ShootProbeAction, DummyAnimateAction}
 }
 
 MoveAction :: struct {
@@ -21,13 +22,22 @@ TurnAction :: struct {
     dir: Direction
 }
 
+DummyAnimateAction :: struct {
+    wait: f32,
+}
+
 // This doesn't imply a "rest", it implies that no action
 // was performed. In the hero, this will wait for input
 NoAction :: struct {
 }
 
 
-
+dummy_animate_action :: proc(by: ^Actor, time: f32 = 0.0) -> (out: Action) {
+    out.variant = DummyAnimateAction{wait = time}
+    out.force_animate = true
+    out.by_actor = by
+    return
+}
 
 no_action :: proc() -> (out: Action) {
     out.variant = NoAction{}
@@ -131,6 +141,7 @@ act_turn_action :: proc(action: Action) {
 
 // Return the time required to complete anim, 0 if it has no animation
 animate_action :: proc(action: Action, prog: f32) -> f32 {
+// TODO: These could use var instead of action
     switch var in action.variant {
     case MoveAction:
         return animate_move_action(action, prog)
@@ -138,6 +149,8 @@ animate_action :: proc(action: Action, prog: f32) -> f32 {
         return animate_turn_action(action, prog)
     case ShootProbeAction:
         return animate_shoot_probe_action(action, prog)
+    case DummyAnimateAction:
+        return var.wait
     case NoAction:
         assert(false)
         return 0.0
@@ -154,6 +167,7 @@ act_action :: proc(action: Action) {
         act_turn_action(action)
     case ShootProbeAction:
         act_shoot_probe_action(action)
+    case DummyAnimateAction:
     case NoAction:
     case:
     }
