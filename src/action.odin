@@ -103,12 +103,17 @@ move_action :: proc(actor: ^Actor, dir: Direction, steps: int) -> Action {
 
 animate_move_action :: proc(action: Action, prog: f32) -> f32 {
     MOVE_ANIM_TIME :: 0.15
+    SUBSCALE_MOVE_ANIM_TIME :: 0.1
+
+    _, is_subscale := action.by_actor.scale_kind.(SubscaleActor)
+    t : f32 = SUBSCALE_MOVE_ANIM_TIME if is_subscale else MOVE_ANIM_TIME
+
     move := action.variant.(MoveAction)
     delta := linalg.to_f32(move.endpos - move.startpos)
 
-    action.by_actor.doffset = prog / MOVE_ANIM_TIME * delta
+    action.by_actor.doffset = prog / t * delta
 
-    return MOVE_ANIM_TIME
+    return t
 }
 
 animate_turn_action :: proc(action: Action, prog: f32) -> f32 {

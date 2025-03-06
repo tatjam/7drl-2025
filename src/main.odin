@@ -53,6 +53,10 @@ main :: proc() {
     probestartpos := tilemap_find_spawn_pos(&game, &game.hero)
     create_probe(&game, probestartpos)
     game.focus_subscale = &game.hero
+    // Do this so player starts functional
+    for i:=1; i < 100; i+=1 {
+        take_turn_organ(game.hero.scale_kind.(FullscaleActor).subscale.cortex)
+    }
 
     sentinel := create_sentinel(&game, game.hero.pos + [2]int{1, 0})
 

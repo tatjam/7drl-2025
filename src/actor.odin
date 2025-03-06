@@ -131,6 +131,7 @@ Actor :: struct {
 
     kind: union {
         ^HeroActor,
+        ^ProbeActor,
         ^NPCActor,
         ^OrganActor,
     }
@@ -212,20 +213,24 @@ destroy_actor :: proc(actor: ^Actor) {
         case ^OrganActor:
             free(v)
         case ^HeroActor:
-            assert(false)
+        case ^ProbeActor:
     }
 }
 
 create_hero :: proc(game: ^GameState, pos: [2]int) {
     out := &game.hero
+    out.kind = &game.hero;
     out.in_game = game
     out.class = {.HERO, .FRIENDLY}
+    out.actions_per_turn = 1
     out.pos = pos
     out.dir = .NORTH
     out.alive = true
     out.sprite = get_texture(&game.assets, "res/agents/player.png")
     out.sprite_rect = rl.Rectangle{0, 0, f32(out.sprite.width), f32(out.sprite.height)}
     out.sprite_size = [2]int{1, 1}
+
+
 
     out.scale_kind = FullscaleActor{}
     fs := &out.scale_kind.(FullscaleActor)
@@ -243,6 +248,7 @@ create_hero :: proc(game: ^GameState, pos: [2]int) {
 
 create_probe :: proc(game: ^GameState, pos: [2]int) {
     out := &game.probe
+    out.kind = &game.probe
     out.in_game = game
     out.class = {.HERO, .FRIENDLY}
     out.pos = pos
@@ -251,6 +257,7 @@ create_probe :: proc(game: ^GameState, pos: [2]int) {
     out.sprite = get_texture(&game.assets, "res/agents/probe.png")
     out.sprite_rect = rl.Rectangle{0, 0, f32(out.sprite.width), f32(out.sprite.height)}
     out.sprite_size = [2]int{1, 1}
+    out.actions_per_turn = SUBSCALE_ACTIONS_PER_TURN
 
     out.scale_kind = SubscaleActor{
         subscale_of = &game.hero
@@ -333,26 +340,12 @@ take_turn_organ :: proc(actor: ^OrganActor) -> Action {
         }
 
         if actor.scale_kind.(SubscaleActor).subscale_of == actor.in_game.focus_subscale && actor.in_game.playing_subscale {
-            return dummy_animate_action(actor, 0.01)
+            //return dummy_animate_action(actor, 0.0)
+            return no_action()
         }
     }
     return no_action()
 }
-
-take_turn :: proc(actor: ^Actor) -> Action {
-    switch v in actor.kind {
-        case ^HeroActor:
-            assert(false, "Use take_turn_hero directly")
-            return take_turn_hero(v)
-        case ^NPCActor:
-            return take_turn_monster(v)
-        case ^OrganActor:
-            return take_turn_organ(v)
-    }
-
-    return no_action()
-}
-
 
 
 create_subscale_map :: proc(for_actor: ^Actor, fname: string, sets: DungeonSettings) {

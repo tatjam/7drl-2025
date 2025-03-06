@@ -16,6 +16,8 @@ ActionFX :: struct {
 }
 
 GameState :: struct {
+    turns_remain: bool,
+
     uifont: rl.Font,
     assets: AssetManager,
     // Last message pushed is last message shown.
@@ -101,7 +103,7 @@ game_push_message :: proc(game: ^GameState, msg: cstring) {
 }
 
 // If it returns true, an animation must be carried out
-game_do_action :: proc(game: ^GameState, action: Action) -> bool {
+game_do_action :: proc(game: ^GameState, action: Action, force_anim := false) -> bool {
     _, is_none := action.variant.(NoAction)
     if is_none {
         return false
@@ -118,6 +120,7 @@ game_do_action :: proc(game: ^GameState, action: Action) -> bool {
             }
         }
         can_see_any |= action.force_animate
+        can_see_any |= force_anim
 
         if can_see_any {
             game.anim_progress = 0.0
@@ -165,44 +168,96 @@ game_update_anim :: proc(game: ^GameState) {
 
 }
 
+game_update_turn_for :: proc(game: ^GameState, actor: ^Actor, force_anim := false) -> bool {
+    if actor.actions_taken >= actor.actions_per_turn do return false
+
+    action : Action
+    switch v in actor.kind {
+        case ^HeroActor:
+           action = take_turn_hero(v)
+        case ^ProbeActor:
+            action = take_turn_probe(v)
+        case ^NPCActor:
+            action = take_turn_monster(v)
+        case ^OrganActor:
+            action = take_turn_organ(v)
+        case nil:
+            assert(false)
+    }
+
+    game.cur_action = action
+
+    _, is_none := action.variant.(NoAction)
+
+    if !(ActorClass.HERO in actor.class && is_none) {
+        actor.actions_taken += 1
+    }
+    game.turns_remain |= actor.actions_taken < actor.actions_per_turn
+
+    if is_none do return false
+
+
+    if game_do_action(game, action) {
+        return true
+    } else {
+        act_action(action)
+    }
+
+    return false
+}
+
 game_update_turn :: proc(game: ^GameState) {
     for {
         if game.turni == -1 {
             // Progress in turn
-            hero_action: Action
+            has_action := false
             if game.playing_subscale {
-                hero_action = take_turn_probe(&game.probe)
+                has_action = game.probe.actions_taken < game.probe.actions_per_turn
             } else {
-                hero_action = take_turn_hero(&game.hero)
+                has_action = game.hero.actions_taken < game.hero.actions_per_turn
             }
-            _, is_none := hero_action.variant.(NoAction)
+            if !has_action {
+                game.turni += 1
+                continue
+            }
+
+            if game.playing_subscale {
+                game_update_turn_for(game, &game.probe, true)
+            } else {
+                game_update_turn_for(game, &game.hero, true)
+            }
+
+            act, is_ok := game.cur_action.(Action)
+            assert(is_ok)
+            _, is_none := act.variant.(NoAction)
             if is_none do break // Continue processing user input
+
             game.turni += 1
-            assert(game_do_action(game, hero_action))
+
             // (User actions always animate)
             break
         } else {
-            // AI actions (TODO)
             if game.turni == len(game.npcs) {
-                // TURN IS DONE
-                free_all(context.temp_allocator)
-                game.turni = -1
-                break
-            } else {
-                action := take_turn(game.npcs[game.turni])
-
-                game.npcs[game.turni].actions_taken += 1
-
-                if game.npcs[game.turni].actions_taken > game.npcs[game.turni].actions_per_turn {
-                    game.npcs[game.turni].actions_taken = 0
-                    game.turni += 1
-                }
-                if game_do_action(game, action) {
-                    break
+                if game.turns_remain {
+                    game.turns_remain = false
+                    game.turni = -1
                 } else {
-                    act_action(action)
-                }
+                    // TURN IS DONE
+                    free_all(context.temp_allocator)
+                    game.turni = -1
+                    game.hero.actions_taken = 0
+                    game.probe.actions_taken = 0
+                    for &npc in game.npcs {
+                        npc.actions_taken = 0
+                    }
+                    game.turns_remain = false
 
+                    break
+                }
+            } else {
+                brk := game_update_turn_for(game, game.npcs[game.turni])
+                game.turni += 1
+                if brk do break
             }
         }
     }
