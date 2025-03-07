@@ -97,12 +97,12 @@ move_action :: proc(actor: ^Actor, dir: Direction, steps: int) -> Action {
         }
 
         act := get_actor_at(actor.in_game, np, sof)
-        if i >= 1 && act != nil && !act.swappable do break
+        if i >= 1 && act != nil && act.impedes_movement && !act.swappable do break
 
         endpos = np
         append(&visited, np)
 
-        if i >= 1 && act != nil && act.swappable {
+        if i >= 1 && act != nil && act.impedes_movement && act.swappable {
             swap_actor = act
             swap_pos = prevp
             break
@@ -322,6 +322,7 @@ act_shoot_probe_action :: proc(action: Action) {
             game_push_message(game, "The scale probe returns!")
         } else {
             game_push_message(game, "The scale probe hits a target!")
+            game.playing_subscale = true
         }
         pos :=  tilemap_find_spawn_pos_dir(game, shoot.hit, dir)
         subs := &game.probe.scale_kind.(SubscaleActor)

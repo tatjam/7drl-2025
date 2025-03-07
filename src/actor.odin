@@ -74,6 +74,19 @@ subscale_wire_draw :: proc(wire: ^SubscaleWire) {
     }
 }
 
+subscale_wire_at :: proc(scale: ^SubscaleMap, pos: [2]int) -> ^SubscaleWire {
+    // TODO: This could be a bit different
+    for &wire in scale.wire {
+        for step in wire.steps {
+            if step == pos {
+                return &wire
+            }
+        }
+    }
+
+    return nil
+}
+
 // If we are not a subscale actor, we must have
 // such a map
 SubscaleMap :: struct {
@@ -99,7 +112,7 @@ ActorClass :: enum {
     HERO,
     FRIENDLY,
     HOSTILE,
-    ENERGY,
+    TURRET,
     ENVIRONMENT,
 }
 
@@ -108,6 +121,8 @@ Actor :: struct {
     actions_per_turn: int,
     actions_taken: int,
     swappable: bool,
+
+    impedes_movement: bool,
 
     class: bit_set[ActorClass],
     alive: bool,
@@ -135,6 +150,7 @@ Actor :: struct {
         ^ProbeActor,
         ^NPCActor,
         ^OrganActor,
+        ^TurretActor,
     }
 }
 
@@ -186,9 +202,14 @@ OrganKind :: enum {
     RADAR,
     FACTORY
 }
+
 OrganActor :: struct {
     energy: int,
     organ_kind: OrganKind,
+    using base: Actor
+}
+
+TurretActor :: struct {
     using base: Actor
 }
 
@@ -213,8 +234,11 @@ destroy_actor :: proc(actor: ^Actor) {
             free(v)
         case ^OrganActor:
             free(v)
+        case ^TurretActor:
+            free(v)
         case ^HeroActor:
         case ^ProbeActor:
+
     }
 }
 
@@ -300,6 +324,7 @@ take_turn_hero :: proc(actor: ^HeroActor) -> Action {
 
     return no_action()
 }
+
 
 take_turn_probe :: proc(actor: ^ProbeActor) -> Action {
     if rl.IsKeyPressed(.SPACE) {
@@ -606,6 +631,43 @@ draw_actor :: proc(actor: ^Actor) {
 
 }
 
+create_turret :: proc(game: ^Game, pos: [2]int, inside: ^Actor) -> ^TurretActor {
+    actor := game_create_npc(game, TurretActor)
+    actor.class = {.TURRET}
+    actor.actions_per_turn = SUBSCALE_ACTIONS_PER_TURN
+
+    actor.pos = pos
+    actor.dir = .NORTH
+    actor.alive = true
+    actor.sprite = get_texture(&game.assets, "res/agents/turret.png")
+    actor.sprite_rect = rl.Rectangle{
+        0, 0,
+        f32(actor.sprite.height), f32(actor.sprite.height)}
+    actor.sprite_size = [2]int{2, 2}
+
+    actor.scale_kind = SubscaleActor{subscale_of = inside}
+
+    return actor
+}
+
+create_collector :: proc(game: ^Game, pos: [2]int, inside: ^Actor) -> ^TurretActor {
+    actor := game_create_npc(game, TurretActor)
+    actor.class = {.TURRET}
+    actor.actions_per_turn = SUBSCALE_ACTIONS_PER_TURN
+
+    actor.pos = pos
+    actor.dir = .NORTH
+    actor.alive = true
+    actor.sprite = get_texture(&game.assets, "res/agents/energy_collector.png")
+    actor.sprite_rect = rl.Rectangle{
+        0, 0,
+        f32(actor.sprite.height), f32(actor.sprite.height)}
+    actor.sprite_size = [2]int{2, 2}
+
+    actor.scale_kind = SubscaleActor{subscale_of = inside}
+    return  actor
+}
+
 create_cortex :: proc(game: ^Game, pos: [2]int, inside: ^Actor, orient: c.int) -> ^OrganActor {
     actor := game_create_npc(game, OrganActor)
     actor.class = {.ENVIRONMENT}
@@ -737,6 +799,7 @@ create_sentinel :: proc(game: ^Game, pos: [2]int) -> ^Actor {
     actor := game_create_npc(game, NPCActor)
     actor.class = {.HOSTILE}
     actor.swappable = true
+    actor.impedes_movement = true
     actor.pos = pos
     actor.dir = .NORTH
     actor.alive = true

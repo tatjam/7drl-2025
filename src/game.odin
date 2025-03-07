@@ -2,6 +2,7 @@ package src
 
 import rl "vendor:raylib"
 import "core:log"
+import "core:math/linalg"
 
 ActionFX :: struct {
     visible: bool,
@@ -15,8 +16,17 @@ ActionFX :: struct {
     tint: rl.Color,
 }
 
+BuildingType :: enum {
+    COLLECTOR,
+    TURRET,
+}
+
 Game :: struct {
     turns_remain: bool,
+
+    building: bool,
+    building_cursor: [2]int,
+    building_selected: BuildingType,
 
     uifont: rl.Font,
     assets: AssetManager,
@@ -181,6 +191,8 @@ game_update_turn_for :: proc(game: ^Game, actor: ^Actor, force_anim := false) ->
             action = take_turn_monster(v)
         case ^OrganActor:
             action = take_turn_organ(v)
+        case ^TurretActor:
+            action = no_action()
         case nil:
             assert(false)
     }
@@ -222,6 +234,11 @@ game_update_turn :: proc(game: ^Game) {
             }
 
             if game.playing_subscale {
+                if rl.IsKeyPressed(rl.KeyboardKey.B) {
+                    // (This is not an action, as it doesn't consume turn)
+                    game.building = true
+                    break
+                }
                 game_update_turn_for(game, &game.probe, true)
             } else {
                 game_update_turn_for(game, &game.hero, true)
@@ -263,6 +280,99 @@ game_update_turn :: proc(game: ^Game) {
     }
 }
 
+BUILDING_RADIUS :: 4
+
+game_building_size :: proc(game: ^Game) -> [2]int {
+    return [2]int{2, 2}
+}
+
+game_building_move_cursor :: proc(game: ^Game, delta: [2]int) {
+    center := game.probe.pos
+    npos := game.building_cursor + delta + game.probe.pos
+
+    dx := game_building_size(game) - [2]int{1, 1}
+    dv1 := linalg.to_f32(npos - game.probe.pos)
+    dv2 := linalg.to_f32([2]int{dx.x, 0} + npos - game.probe.pos)
+    dv3 := linalg.to_f32([2]int{0, dx.y} + npos - game.probe.pos)
+    dv4 := linalg.to_f32(dx + npos - game.probe.pos)
+    if  linalg.length(dv1) <= BUILDING_RADIUS &&
+        linalg.length(dv2) <= BUILDING_RADIUS &&
+        linalg.length(dv3) <= BUILDING_RADIUS &&
+        linalg.length(dv4) <= BUILDING_RADIUS {
+
+        game.building_cursor += delta
+    }
+}
+
+game_building_valid_placement :: proc(game: ^Game) -> bool {
+    sx := game.building_cursor + game.probe.pos
+    sz := game_building_size(game)
+
+    sscale_actor := game.probe.scale_kind.(SubscaleActor).subscale_of
+    sscale := sscale_actor.scale_kind.(FullscaleActor).subscale
+
+    for dx := 0; dx < sz.x; dx += 1 {
+        for dy := 0; dy < sz.y; dy += 1 {
+            p := sx + [2]int{dx, dy}
+
+            if tilemap_tile_collides(sscale.tmap, p) {
+                return false
+            }
+            if get_actor_at(game, p, sscale_actor) != nil {
+                return false
+            }
+            if subscale_wire_at(&sscale, p) != nil {
+                return false
+            }
+        }
+    }
+
+    return true
+}
+
+game_build_building :: proc(game: ^Game) {
+    if !game_building_valid_placement(game) do return
+
+    focus := game.probe.scale_kind.(SubscaleActor).subscale_of
+    pos := game.building_cursor + game.probe.pos
+    switch game.building_selected {
+    case .COLLECTOR:
+        create_collector(game, pos + [2]int{1, 1}, focus)
+    case .TURRET:
+        create_turret(game, pos + [2]int{1, 1}, focus)
+    }
+}
+
+game_update_building :: proc(game: ^Game) {
+    if rl.IsKeyPressed(rl.KeyboardKey.B) {
+        game.building = false
+    }
+
+    if rl.IsKeyPressed(rl.KeyboardKey.H) {
+        game_building_move_cursor(game, [2]int{-1, 0})
+    }
+    if rl.IsKeyPressed(rl.KeyboardKey.J) {
+        game_building_move_cursor(game, [2]int{0, 1})
+    }
+    if rl.IsKeyPressed(rl.KeyboardKey.K) {
+        game_building_move_cursor(game, [2]int{0, -1})
+    }
+    if rl.IsKeyPressed(rl.KeyboardKey.L) {
+        game_building_move_cursor(game, [2]int{1, 0})
+    }
+
+    if rl.IsKeyPressed(rl.KeyboardKey.T) {
+        game.building_selected = .TURRET
+    }
+    if rl.IsKeyPressed(rl.KeyboardKey.C) {
+        game.building_selected = .COLLECTOR
+    }
+
+    if rl.IsKeyPressed(rl.KeyboardKey.ENTER) {
+        game_build_building(game)
+    }
+}
+
 game_update :: proc(game: ^Game) {
     if game.show_help {
         if rl.GetCharPressed() == '?' || rl.GetKeyPressed() == rl.KeyboardKey.ESCAPE {
@@ -273,10 +383,14 @@ game_update :: proc(game: ^Game) {
             game.show_help = true
             return
         }
-        if game.anim_progress >= 0 {
-            game_update_anim(game)
+        if game.building {
+            game_update_building(game)
         } else {
-            game_update_turn(game)
+            if game.anim_progress >= 0 {
+                game_update_anim(game)
+            } else {
+                game_update_turn(game)
+            }
         }
     }
 }
@@ -312,8 +426,11 @@ game_draw_game :: proc(game: ^Game) {
     }
     draw_world_tilemap(game.worldmap)
 
-    rl.EndScissorMode()
     rl.EndMode2D()
+    if game.playing_subscale {
+        rl.DrawRectangleRec(game_screen, rl.ColorAlpha(rl.GRAY, 0.3))
+    }
+    rl.EndScissorMode()
 
 }
 
@@ -367,16 +484,47 @@ game_draw_subscale :: proc(game: ^Game) {
         subscale_wire_draw(&wire)
     }
 
-    // Draw the actors
-    if game.probe.scale_kind.(SubscaleActor).subscale_of == game.focus_subscale {
-        draw_actor(&game.probe)
-    }
 
     for &actor in game.npcs {
         subscale, is_subscale := actor.scale_kind.(SubscaleActor)
         if is_subscale && subscale.subscale_of == game.focus_subscale {
             draw_actor(actor)
         }
+    }
+
+    // Draw the actors
+    if game.probe.scale_kind.(SubscaleActor).subscale_of == game.focus_subscale {
+        draw_actor(&game.probe)
+    }
+
+    if game.building {
+        for x := -BUILDING_RADIUS; x <= BUILDING_RADIUS; x+=1 {
+            for y := -BUILDING_RADIUS; y <= BUILDING_RADIUS; y+=1 {
+                p := linalg.to_f32(game.probe.pos + [2]int{x, y})
+                if linalg.length(p - linalg.to_f32(game.probe.pos)) < BUILDING_RADIUS {
+                    rl.DrawRectangleV(p, [2]f32{1, 1}, rl.ColorAlpha(rl.WHITE, 0.1))
+                }
+            }
+        }
+
+        p := linalg.to_f32(game.probe.pos + game.building_cursor)
+        s := linalg.to_f32(game_building_size(game))
+        tex: rl.Texture2D
+        switch game.building_selected {
+        case .COLLECTOR:
+            tex = get_texture(&game.assets, "res/agents/energy_collector.png")
+        case .TURRET:
+            tex = get_texture(&game.assets, "res/agents/turret.png")
+        }
+        tint := rl.GRAY
+        if !game_building_valid_placement(game) {
+            tint = rl.RED
+        }
+
+        rl.DrawTexturePro(tex,
+            rl.Rectangle{0.0, 0.0, f32(tex.width), f32(tex.height)},
+            rl.Rectangle{p.x, p.y, s.x, s.y},
+            [2]f32{0.0, 0.0}, 0.0, rl.ColorAlpha(tint, 0.8))
     }
 
     for fx in game.fx {
@@ -386,6 +534,11 @@ game_draw_subscale :: proc(game: ^Game) {
     }
 
     rl.EndMode2D()
+
+    if !game.playing_subscale {
+        rl.DrawRectangleRec(subscale_screen, rl.ColorAlpha(rl.GRAY, 0.3))
+    }
+
     rl.EndScissorMode()
 }
 
