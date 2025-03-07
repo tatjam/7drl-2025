@@ -107,6 +107,7 @@ Actor :: struct {
     // If set to 0, an action will take place eitherway
     actions_per_turn: int,
     actions_taken: int,
+    swappable: bool,
 
     class: bit_set[ActorClass],
     alive: bool,
@@ -735,6 +736,7 @@ create_radar :: proc(game: ^GameState, pos: [2]int, inside: ^Actor, orient: c.in
 create_sentinel :: proc(game: ^GameState, pos: [2]int) -> ^Actor {
     actor := game_create_npc(game, NPCActor)
     actor.class = {.HOSTILE}
+    actor.swappable = true
     actor.pos = pos
     actor.dir = .NORTH
     actor.alive = true

@@ -15,7 +15,9 @@ Action :: struct {
 
 MoveAction :: struct {
     startpos: [2]int,
-    endpos: [2]int
+    endpos: [2]int,
+    swap_actor: ^Actor,
+    swap_pos: [2]int,
 }
 
 TurnAction :: struct {
@@ -71,21 +73,40 @@ move_action :: proc(actor: ^Actor, dir: Direction, steps: int) -> Action {
 
     subscale, is_subscale := actor.scale_kind.(SubscaleActor)
     wmap := actor.in_game.worldmap
+    sof : ^Actor = nil
     if is_subscale {
         wmap = subscale.subscale_of.scale_kind.(FullscaleActor).subscale.tmap
+        sof = subscale.subscale_of
     }
 
+    swap_actor: ^Actor = nil
+    swap_pos: [2]int
+
+    prevp := np
+
     for ;i <= steps; i+=1 {
+        prevp = np
         np = np + delta * i
 
         if np.x < 0 || np.y < 0 || np.x >= wmap.width || np.y >= wmap.height {
             break
         }
 
-        if tilemap_tile_collides(wmap, np) do break
+        if i >= 1 {
+            if tilemap_tile_collides(wmap, np) do break
+        }
+
+        act := get_actor_at(actor.in_game, np, sof)
+        if i >= 1 && act != nil && !act.swappable do break
 
         endpos = np
         append(&visited, np)
+
+        if i >= 1 && act != nil && act.swappable {
+            swap_actor = act
+            swap_pos = prevp
+            break
+        }
     }
 
 
@@ -96,7 +117,9 @@ move_action :: proc(actor: ^Actor, dir: Direction, steps: int) -> Action {
 
     return Action{by_actor = actor, need_see = visited, variant = MoveAction{
         startpos = actor.pos,
-        endpos = np
+        endpos = np,
+        swap_actor = swap_actor,
+        swap_pos = swap_pos,
     }}
 
 }
@@ -113,6 +136,10 @@ animate_move_action :: proc(action: Action, prog: f32) -> f32 {
 
     action.by_actor.doffset = prog / t * delta
 
+    if move.swap_actor != nil {
+        delta_swap := linalg.to_f32(move.swap_pos - move.swap_actor.pos)
+        move.swap_actor.doffset = prog / t * delta_swap
+    }
     return t
 }
 
@@ -136,6 +163,11 @@ act_move_action :: proc(action: Action) {
     move := action.variant.(MoveAction)
     action.by_actor.pos = move.endpos
     action.by_actor.doffset = [2]f32{0.0, 0.0}
+
+    if move.swap_actor != nil {
+        move.swap_actor.pos = move.swap_pos
+        move.swap_actor.doffset = [2]f32{0.0, 0.0}
+    }
 }
 
 act_turn_action :: proc(action: Action) {
