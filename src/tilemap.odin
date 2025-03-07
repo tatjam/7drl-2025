@@ -222,7 +222,7 @@ tile_center :: proc(pos: [2]int) -> [2]f32 {
     return [2]f32{f32(pos.x) + 0.5, f32(pos.y) + 0.5}
 }
 
-tilemap_find_spawn_pos :: proc(game:^GameState, subscale: ^Actor) -> [2]int {
+tilemap_find_spawn_pos :: proc(game:^Game, subscale: ^Actor) -> [2]int {
     tm := tilemap_get_map(game, subscale)
 
     for {
@@ -235,7 +235,7 @@ tilemap_find_spawn_pos :: proc(game:^GameState, subscale: ^Actor) -> [2]int {
     return [2]int{0, 0}
 }
 
-tilemap_get_map :: proc(game: ^GameState, subscale: ^Actor) -> ^Tilemap {
+tilemap_get_map :: proc(game: ^Game, subscale: ^Actor) -> ^Tilemap {
     if subscale == nil {
         return &game.worldmap
     } else {
@@ -244,7 +244,7 @@ tilemap_get_map :: proc(game: ^GameState, subscale: ^Actor) -> ^Tilemap {
     }
 }
 
-tilemap_scan_free :: proc(game: ^GameState, subscale: ^Actor, dir: Direction, fixed: int) -> (pos: [2]int, anyfree: bool) {
+tilemap_scan_free :: proc(game: ^Game, subscale: ^Actor, dir: Direction, fixed: int) -> (pos: [2]int, anyfree: bool) {
     tm := tilemap_get_map(game, subscale)
 
     m: int
@@ -293,7 +293,7 @@ tilemap_tile_collides :: proc(tm: Tilemap, tile: [2]int) -> bool {
     return tm.walls[tile.y * tm.width + tile.x] || tm.outside[tile.y * tm.width + tile.x]
 }
 
-tilemap_find_spawn_pos_dir :: proc(game: ^GameState, subscale: ^Actor, dir: Direction) -> [2]int {
+tilemap_find_spawn_pos_dir :: proc(game: ^Game, subscale: ^Actor, dir: Direction) -> [2]int {
     tm := tilemap_get_map(game, subscale)
 
     if dir == .NORTH {

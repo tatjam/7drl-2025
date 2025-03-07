@@ -123,7 +123,7 @@ Actor :: struct {
     // For sprites which have different directions based on sprite
     ignore_dir_graphics: bool,
     dir: Direction,
-    in_game: ^GameState,
+    in_game: ^Game,
 
     scale_kind: union #no_nil{
         FullscaleActor,
@@ -218,7 +218,7 @@ destroy_actor :: proc(actor: ^Actor) {
     }
 }
 
-create_hero :: proc(game: ^GameState, pos: [2]int) {
+create_hero :: proc(game: ^Game, pos: [2]int) {
     out := &game.hero
     out.kind = &game.hero;
     out.in_game = game
@@ -247,7 +247,7 @@ create_hero :: proc(game: ^GameState, pos: [2]int) {
     return
 }
 
-create_probe :: proc(game: ^GameState, pos: [2]int) {
+create_probe :: proc(game: ^Game, pos: [2]int) {
     out := &game.probe
     out.kind = &game.probe
     out.in_game = game
@@ -606,7 +606,7 @@ draw_actor :: proc(actor: ^Actor) {
 
 }
 
-create_cortex :: proc(game: ^GameState, pos: [2]int, inside: ^Actor, orient: c.int) -> ^OrganActor {
+create_cortex :: proc(game: ^Game, pos: [2]int, inside: ^Actor, orient: c.int) -> ^OrganActor {
     actor := game_create_npc(game, OrganActor)
     actor.class = {.ENVIRONMENT}
     actor.actions_per_turn = SUBSCALE_ACTIONS_PER_TURN
@@ -689,7 +689,7 @@ factory_cable_location :: proc(factory: ^Actor) -> (outer: [2]int, inner: [2]int
     return factory.pos, factory.pos
 }
 
-create_engine :: proc(game: ^GameState, pos: [2]int, inside: ^Actor, orient: c.int) -> ^OrganActor {
+create_engine :: proc(game: ^Game, pos: [2]int, inside: ^Actor, orient: c.int) -> ^OrganActor {
     actor := game_create_npc(game, OrganActor)
     actor.class = {.ENVIRONMENT}
     actor.organ_kind = .ENGINE
@@ -711,7 +711,7 @@ create_engine :: proc(game: ^GameState, pos: [2]int, inside: ^Actor, orient: c.i
     return actor
 }
 
-create_radar :: proc(game: ^GameState, pos: [2]int, inside: ^Actor, orient: c.int) -> ^OrganActor {
+create_radar :: proc(game: ^Game, pos: [2]int, inside: ^Actor, orient: c.int) -> ^OrganActor {
     actor := game_create_npc(game, OrganActor)
     actor.class = {.ENVIRONMENT}
     actor.organ_kind = .RADAR
@@ -733,7 +733,7 @@ create_radar :: proc(game: ^GameState, pos: [2]int, inside: ^Actor, orient: c.in
     return actor
 }
 
-create_sentinel :: proc(game: ^GameState, pos: [2]int) -> ^Actor {
+create_sentinel :: proc(game: ^Game, pos: [2]int) -> ^Actor {
     actor := game_create_npc(game, NPCActor)
     actor.class = {.HOSTILE}
     actor.swappable = true
@@ -758,7 +758,7 @@ create_sentinel :: proc(game: ^GameState, pos: [2]int) -> ^Actor {
     return actor
 }
 
-create_factory :: proc(game: ^GameState, pos: [2]int, inside: ^Actor, orient: c.int) -> ^OrganActor {
+create_factory :: proc(game: ^Game, pos: [2]int, inside: ^Actor, orient: c.int) -> ^OrganActor {
     actor := game_create_npc(game, OrganActor)
     actor.class = {.ENVIRONMENT}
     actor.organ_kind = .FACTORY

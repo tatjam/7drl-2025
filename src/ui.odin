@@ -11,7 +11,7 @@ STATUS_PANEL_W :: 0.4
 // a bottom panel of status messages and player status
 // and the right panel for subscale probe
 
-statuspanel_draw :: proc(game: ^GameState, starth, endw: c.int) {
+statuspanel_draw :: proc(game: ^Game, starth, endw: c.int) {
     h := rl.GetScreenHeight() - starth
     rl.DrawRectangleLines(0, starth, endw, h, rl.WHITE)
 
@@ -35,17 +35,17 @@ statuspanel_draw :: proc(game: ^GameState, starth, endw: c.int) {
     rl.EndScissorMode()
 }
 
-scalepanel_draw :: proc(game: ^GameState, startw: c.int, endh: c.int) {
+scalepanel_draw :: proc(game: ^Game, startw: c.int, endh: c.int) {
     rl.DrawRectangleLines(startw, 0, rl.GetScreenWidth() - startw, endh, rl.WHITE)
 }
 
-userpanel_draw :: proc(game: ^GameState, startw: c.int, starth: c.int, endw: c.int) {
+userpanel_draw :: proc(game: ^Game, startw: c.int, starth: c.int, endw: c.int) {
     rl.DrawRectangleLines(startw, starth,
         endw - startw, rl.GetScreenHeight() - starth, rl.WHITE)
 
 }
 
-helppanel_draw :: proc(game: ^GameState, marginw: c.int, marginh: c.int) {
+helppanel_draw :: proc(game: ^Game, marginw: c.int, marginh: c.int) {
     if game.show_help {
         rl.DrawRectangle(marginw, marginh,
             rl.GetScreenWidth() - 2 * marginw,
@@ -59,7 +59,7 @@ helppanel_draw :: proc(game: ^GameState, marginw: c.int, marginh: c.int) {
     }
 }
 
-ui_draw :: proc(game: ^GameState) {
+ui_draw :: proc(game: ^Game) {
     wf := f32(rl.GetScreenWidth())
     hf := f32(rl.GetScreenHeight())
 

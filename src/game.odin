@@ -15,7 +15,7 @@ ActionFX :: struct {
     tint: rl.Color,
 }
 
-GameState :: struct {
+Game :: struct {
     turns_remain: bool,
 
     uifont: rl.Font,
@@ -65,7 +65,7 @@ actor_intersects :: proc(actor:^Actor, pos: [2]int, subscale_of: ^Actor = nil) -
     return false
 }
 
-get_actor_at :: proc(game: ^GameState, pos: [2]int, subscale_of: ^Actor = nil) -> ^Actor {
+get_actor_at :: proc(game: ^Game, pos: [2]int, subscale_of: ^Actor = nil) -> ^Actor {
     if actor_intersects(&game.hero, pos, subscale_of) do return &game.hero
     if actor_intersects(&game.probe, pos, subscale_of) do return &game.probe
 
@@ -76,7 +76,7 @@ get_actor_at :: proc(game: ^GameState, pos: [2]int, subscale_of: ^Actor = nil) -
     return nil
 }
 
-create_game :: proc() -> (out: GameState) {
+create_game :: proc() -> (out: Game) {
     out.uifont = rl.LoadFont("res/fonts/setback.png")
     out.turni = -1
     out.anim_progress = -1.0
@@ -85,7 +85,7 @@ create_game :: proc() -> (out: GameState) {
     return
 }
 
-destroy_game :: proc(game: ^GameState) {
+destroy_game :: proc(game: ^Game) {
     destroy_actor(&game.probe)
     destroy_actor(&game.hero)
     for npc in game.npcs {
@@ -97,13 +97,13 @@ destroy_game :: proc(game: ^GameState) {
     destroy_assets(&game.assets)
 }
 
-game_push_message :: proc(game: ^GameState, msg: cstring) {
+game_push_message :: proc(game: ^Game, msg: cstring) {
     append(&game.statuslog, msg)
     game.lastmessage_t = rl.GetTime()
 }
 
 // If it returns true, an animation must be carried out
-game_do_action :: proc(game: ^GameState, action: Action, force_anim := false) -> bool {
+game_do_action :: proc(game: ^Game, action: Action, force_anim := false) -> bool {
     _, is_none := action.variant.(NoAction)
     if is_none {
         return false
@@ -147,7 +147,7 @@ game_do_action :: proc(game: ^GameState, action: Action, force_anim := false) ->
     }
 }
 
-game_update_anim :: proc(game: ^GameState) {
+game_update_anim :: proc(game: ^Game) {
     // Animate cur action
     action, is_ok := game.cur_action.(Action)
     assert(is_ok)
@@ -168,7 +168,7 @@ game_update_anim :: proc(game: ^GameState) {
 
 }
 
-game_update_turn_for :: proc(game: ^GameState, actor: ^Actor, force_anim := false) -> bool {
+game_update_turn_for :: proc(game: ^Game, actor: ^Actor, force_anim := false) -> bool {
     if actor.actions_taken >= actor.actions_per_turn do return false
 
     action : Action
@@ -206,7 +206,7 @@ game_update_turn_for :: proc(game: ^GameState, actor: ^Actor, force_anim := fals
     return false
 }
 
-game_update_turn :: proc(game: ^GameState) {
+game_update_turn :: proc(game: ^Game) {
     for {
         if game.turni == -1 {
             // Progress in turn
@@ -263,7 +263,7 @@ game_update_turn :: proc(game: ^GameState) {
     }
 }
 
-game_update :: proc(game: ^GameState) {
+game_update :: proc(game: ^Game) {
     if game.show_help {
         if rl.GetCharPressed() == '?' || rl.GetKeyPressed() == rl.KeyboardKey.ESCAPE {
             game.show_help = false
@@ -281,7 +281,7 @@ game_update :: proc(game: ^GameState) {
     }
 }
 
-game_draw_game :: proc(game: ^GameState) {
+game_draw_game :: proc(game: ^Game) {
     cam: rl.Camera2D
     cam.zoom = 64.0
 
@@ -317,7 +317,7 @@ game_draw_game :: proc(game: ^GameState) {
 
 }
 
-game_create_npc :: proc(game: ^GameState, $T: typeid) -> ^T {
+game_create_npc :: proc(game: ^Game, $T: typeid) -> ^T {
     id := len(game.npcs)
 
     actor := new(T)
@@ -327,7 +327,7 @@ game_create_npc :: proc(game: ^GameState, $T: typeid) -> ^T {
     return actor
 }
 
-game_draw_subscale :: proc(game: ^GameState) {
+game_draw_subscale :: proc(game: ^Game) {
     cam: rl.Camera2D
     if rl.GetScreenWidth() > 1366 && rl.GetScreenHeight() > 768 {
         cam.zoom = 32.0
@@ -390,7 +390,7 @@ game_draw_subscale :: proc(game: ^GameState) {
 }
 
 
-game_draw :: proc(game: ^GameState) {
+game_draw :: proc(game: ^Game) {
     game_draw_game(game)
     game_draw_subscale(game)
 
