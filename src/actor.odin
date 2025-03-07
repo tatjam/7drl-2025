@@ -370,7 +370,7 @@ ai_can_target :: proc(ai: ^NPCActor, target: ^Actor) -> bool {
     compatible := false
     for tag in ai.target_acquire_class {
         if tag in target.class {
-           compatible = true
+            compatible = true
             break
         }
     }
@@ -1016,7 +1016,7 @@ create_sentinel :: proc(game: ^Game, pos: [2]int) -> ^Actor {
     actor.sprite_size = [2]int{1, 1}
 
     actor.require_los = true
-    actor.target_ai = ChaserAI{max_turns_without_vision = 3, min_dist = 2.0}
+    actor.target_ai = ChaserAI{max_turns_without_vision = 2, min_dist = 2.0}
     actor.loiter_ai = RandomMoveAI{}
     actor.target_acquire_class = {.HERO}
 

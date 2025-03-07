@@ -24,6 +24,9 @@ BuildingType :: enum {
 Game :: struct {
     turns_remain: bool,
 
+    skip_further_anims: bool,
+    start_skipping: f64,
+
     building: bool,
     building_cursor: [2]int,
     building_selected: BuildingType,
@@ -132,7 +135,7 @@ game_do_action :: proc(game: ^Game, action: Action, force_anim := false) -> bool
         can_see_any |= action.force_animate
         can_see_any |= force_anim
 
-        if can_see_any {
+        if can_see_any && !game.skip_further_anims {
             game.anim_progress = 0.0
             game.cur_action = action
             return true
@@ -145,7 +148,7 @@ game_do_action :: proc(game: ^Game, action: Action, force_anim := false) -> bool
     }
     else {
         // Within a subscale actor, all actions are visible
-        if game.focus_subscale != subscale.subscale_of || !game.playing_subscale {
+        if game.focus_subscale != subscale.subscale_of || !game.playing_subscale || game.skip_further_anims {
             game.anim_progress = -1.0
             act_action(action)
             return false
@@ -162,7 +165,15 @@ game_update_anim :: proc(game: ^Game) {
     action, is_ok := game.cur_action.(Action)
     assert(is_ok)
 
-    if game.anim_progress >= animate_action(action, game.anim_progress) {
+
+    t := animate_action(action, game.anim_progress)
+    if rl.GetKeyPressed() != rl.KeyboardKey.KEY_NULL {
+        game.anim_progress = t
+        game.skip_further_anims = true
+        game.start_skipping = rl.GetTime()
+    }
+
+    if game.anim_progress >= t {
         for fx in game.fx {
             free(fx)
         }
@@ -266,6 +277,7 @@ game_update_turn :: proc(game: ^Game) {
                         npc.actions_taken = 0
                     }
                     game.turns_remain = false
+                    game.skip_further_anims = false
 
                     break
                 }
@@ -372,6 +384,7 @@ game_update_building :: proc(game: ^Game) {
 }
 
 game_update :: proc(game: ^Game) {
+
     if game.show_help {
         if rl.GetCharPressed() == '?' || rl.GetKeyPressed() == rl.KeyboardKey.ESCAPE {
             game.show_help = false

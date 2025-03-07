@@ -125,12 +125,16 @@ move_action :: proc(actor: ^Actor, dir: Direction, steps: int) -> Action {
         }
 
         act := get_actor_at(actor.in_game, np, sof)
-        if i >= 1 && act != nil && act.impedes_movement && !act.swappable do break
+        if i >= 1 && act != nil && act.impedes_movement &&
+            !(act.swappable && .HERO in actor.class) {
+
+            break
+        }
 
         endpos = np
         append(&visited, np)
 
-        if i >= 1 && act != nil && act.impedes_movement && act.swappable {
+        if i >= 1 && act != nil && act.impedes_movement && (act.swappable && .HERO in actor.class) {
             swap_actor = act
             swap_pos = prevp
             break
@@ -176,8 +180,8 @@ animate_charge_suck_action :: proc(action: Action, prog: f32) -> f32 {
 }
 
 animate_move_action :: proc(action: Action, prog: f32) -> f32 {
-    MOVE_ANIM_TIME :: 0.15
-    SUBSCALE_MOVE_ANIM_TIME :: 0.1
+    MOVE_ANIM_TIME :: 0.1
+    SUBSCALE_MOVE_ANIM_TIME :: 0.03
 
     _, is_subscale := action.by_actor.scale_kind.(SubscaleActor)
     t : f32 = SUBSCALE_MOVE_ANIM_TIME if is_subscale else MOVE_ANIM_TIME
@@ -191,6 +195,8 @@ animate_move_action :: proc(action: Action, prog: f32) -> f32 {
         delta_swap := linalg.to_f32(move.swap_pos - move.swap_actor.pos)
         move.swap_actor.doffset = prog / t * delta_swap
     }
+    // TODO: This feels clumsy
+    //return 0.0
     return t
 }
 
