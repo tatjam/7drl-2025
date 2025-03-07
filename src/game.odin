@@ -206,8 +206,6 @@ game_update_turn_for :: proc(game: ^Game, actor: ^Actor, force_anim := false) ->
             action = take_turn_organ(v)
         case ^TurretActor:
             action = take_turn_turret(v)
-        case nil:
-            assert(false)
     }
 
     game.cur_action = action

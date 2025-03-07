@@ -40,6 +40,7 @@ scalepanel_draw :: proc(game: ^Game, startw: c.int, endh: c.int) {
     rl.DrawRectangleLines(startw, 0, rl.GetScreenWidth() - startw, endh, rl.WHITE)
 }
 
+HUGE_SKIP :: 24.0
 BIG_SKIP :: 14.0
 SKIP :: 12.0
 
@@ -89,11 +90,11 @@ userpanel_draw :: proc(game: ^Game, startw: c.int, starth: c.int, endw: c.int) {
 
     str := fmt.ctprint("Probe: ", game.probe.energy, "/", game.probe.max_energy)
     rl.DrawTextEx(game.uifont, str, [2]f32{w, h}, f32(game.uifont.baseSize), 4, rl.WHITE)
-    h += BIG_SKIP
+    h += HUGE_SKIP
 
     str = fmt.ctprint("Income: ", game.last_income)
     rl.DrawTextEx(game.uifont, str, [2]f32{w, h}, f32(game.uifont.baseSize), 4, rl.WHITE)
-    h += BIG_SKIP
+    h += HUGE_SKIP
 
     rl.DrawTextEx(game.uifont, "Self", [2]f32{w, h}, f32(game.uifont.baseSize), 4, rl.WHITE)
     h += BIG_SKIP
@@ -101,14 +102,15 @@ userpanel_draw :: proc(game: ^Game, startw: c.int, starth: c.int, endw: c.int) {
     self_scale := game.hero.scale_kind.(FullscaleActor).subscale
     userpanel_summary(game, &game.hero, &self_scale, w, &h)
 
+    h += HUGE_SKIP
 
-
-    // Target-energy
-    rl.DrawTextEx(game.uifont, "Target", [2]f32{w, h}, f32(game.uifont.baseSize), 4, rl.WHITE)
-    h += BIG_SKIP
 
 
     if game.focus_subscale != nil && game.focus_subscale != &game.hero {
+        // Target-energy
+        rl.DrawTextEx(game.uifont, "Target", [2]f32{w, h}, f32(game.uifont.baseSize), 4, rl.WHITE)
+        h += BIG_SKIP
+
         fscale := game.focus_subscale.scale_kind.(FullscaleActor).subscale
         userpanel_summary(game, game.focus_subscale, &fscale, w, &h)
     }

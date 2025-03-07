@@ -12,7 +12,7 @@ Action :: struct {
     force_animate: bool,
     variant: union{
         NoAction, MoveAction, TurnAction, ShootProbeAction, DummyAnimateAction,
-        ChargeSuckAction}
+        ChargeSuckAction, CreateSolitonAction}
 }
 
 MoveAction :: struct {
@@ -42,6 +42,10 @@ ChargeSuckAction :: struct {
     pos: [2]int,
     charge_index: int,
     to_probe: ^ProbeActor,
+}
+
+CreateSolitonAction :: struct {
+
 }
 
 dummy_animate_action :: proc(by: ^Actor, time: f32 = 0.0) -> (out: Action) {
@@ -176,6 +180,20 @@ move_action :: proc(actor: ^Actor, dir: Direction, steps: int) -> Action {
 
 }
 
+create_soliton_action :: proc(actor: ^OrganActor) -> Action {
+    if actor.energy >= 3 do return Action{by_actor = actor, variant=CreateSolitonAction{}}
+    return no_action()
+}
+
+act_create_soliton_action :: proc(act: Action) {
+    cms := act.variant.(CreateSolitonAction)
+
+    actor := act.by_actor.kind.(^OrganActor)
+    actor.energy -= 3
+    sscale := actor.scale_kind.(SubscaleActor)
+    create_melee_soliton(actor.in_game, actor.pos, sscale.subscale_of, .FRIENDLY in actor.class)
+}
+
 animate_charge_suck_action :: proc(action: Action, prog: f32) -> f32 {
     CHARGE_SUCK_ANIM_TIME :: 0.15
     game := action.by_actor.in_game
@@ -300,6 +318,9 @@ animate_action :: proc(action: Action, prog: f32) -> f32 {
         return var.wait
     case ChargeSuckAction:
         return animate_charge_suck_action(action, prog)
+    case CreateSolitonAction:
+        // TODO
+        return 0.0
     case NoAction:
         assert(false)
         return 0.0
@@ -318,6 +339,8 @@ act_action :: proc(action: Action) {
         act_shoot_probe_action(action)
     case ChargeSuckAction:
         act_charge_suck_action(action)
+    case CreateSolitonAction:
+        act_create_soliton_action(action)
     case DummyAnimateAction:
     case NoAction:
     case:

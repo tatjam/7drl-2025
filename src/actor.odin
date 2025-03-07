@@ -148,7 +148,7 @@ Actor :: struct {
         SubscaleActor
     },
 
-    kind: union {
+    kind: union #no_nil {
         ^HeroActor,
         ^ProbeActor,
         ^NPCActor,
@@ -524,7 +524,30 @@ take_turn_monster :: proc(actor: ^NPCActor) -> Action {
     return no_action()
 }
 
+is_invader :: proc(inside: ^Actor, possible_invader: ^Actor) -> bool {
+    needed_tag : ActorClass = .HOSTILE if .FRIENDLY in inside.class else .FRIENDLY
+    if !possible_invader.alive do return false
+    if needed_tag not_in possible_invader.class do return false
+
+    sscale, is_subscale := possible_invader.scale_kind.(SubscaleActor)
+    if !is_subscale do return false
+    if sscale.subscale_of != inside do return false
+
+    return true
+}
+
+any_invader_present :: proc(inside: ^Actor) -> bool {
+    if is_invader(inside, &inside.in_game.probe) do return true
+    for &possible_invader in inside.in_game.npcs {
+        if is_invader(inside, possible_invader) do return true
+    }
+
+    return false
+}
+
 take_turn_organ :: proc(actor: ^OrganActor) -> Action {
+    sscale := actor.scale_kind.(SubscaleActor)
+
     if actor.organ_kind == .CORTEX {
         if actor.actions_taken == 0 {
             actor.energy = 16 + actor.extra_energy
@@ -541,7 +564,12 @@ take_turn_organ :: proc(actor: ^OrganActor) -> Action {
             //return dummy_animate_action(actor, 0.0)
             return no_action()
         }
+    } else if actor.organ_kind == .FACTORY {
+        if actor.energy > 3 && any_invader_present(actor.scale_kind.(SubscaleActor).subscale_of){
+            return create_soliton_action(actor)
+        }
     }
+
     return no_action()
 }
 
@@ -746,7 +774,7 @@ create_subscale_map :: proc(for_actor: ^Actor, fname: string, sets: DungeonSetti
             set_footprint(&fullscale.subscale.tmap, tag.pos, [2]int{-1,-1}, [2]int{1,0})
             append(&radars, radar)
         } else if tag.tag == FACTORY_ID {
-            factory := create_factory(game, tag.pos, for_actor, rl.GetRandomValue(0, 3))
+            factory := create_factory(game, tag.pos, for_actor, rl.GetRandomValue(0, 3), .FRIENDLY in for_actor.class)
             clear_rectangle(&fullscale.subscale.tmap, tag.pos, [2]int{2,2})
             set_footprint(&fullscale.subscale.tmap, tag.pos, [2]int{-1,-1}, [2]int{1,0})
             append(&factories, factory)
@@ -877,7 +905,7 @@ create_collector :: proc(game: ^Game, pos: [2]int, inside: ^Actor, for_probe: ^P
     actor.class = {.TURRET}
     actor.actions_per_turn = 4
     actor.target_wires = true
-    actor.target_radius = 6.0
+    actor.target_radius = 4.0
     actor.damage = 1
 
     actor.probe = for_probe
@@ -1027,6 +1055,27 @@ create_radar :: proc(game: ^Game, pos: [2]int, inside: ^Actor, orient: c.int) ->
     return actor
 }
 
+create_melee_soliton :: proc(game: ^Game, pos: [2]int, inside: ^Actor, friend: bool) -> ^Actor {
+    actor := game_create_npc(game, NPCActor)
+    actor.class = {.FRIENDLY} if friend else {.HOSTILE}
+
+    actor.pos = pos
+    actor.ignore_dir_graphics = true
+    actor.dir = .NORTH
+    actor.alive = true
+    actor.sprite = get_texture(&game.assets, "res/agents/melee_soliton.png")
+    w := actor.sprite.width / 4
+    actor.sprite_rect = rl.Rectangle{
+        f32(0 * w), 0,
+        f32(w), f32(actor.sprite.height)}
+    actor.sprite_size = [2]int{1, 1}
+
+    actor.scale_kind = SubscaleActor{subscale_of = inside}
+
+    return actor
+
+}
+
 create_sentinel :: proc(game: ^Game, pos: [2]int) -> ^Actor {
     actor := game_create_npc(game, NPCActor)
     actor.actions_per_turn = 1
@@ -1060,12 +1109,13 @@ create_sentinel :: proc(game: ^Game, pos: [2]int) -> ^Actor {
     return actor
 }
 
-create_factory :: proc(game: ^Game, pos: [2]int, inside: ^Actor, orient: c.int) -> ^OrganActor {
+create_factory :: proc(game: ^Game, pos: [2]int, inside: ^Actor, orient: c.int, friendly: bool) -> ^OrganActor {
     actor := game_create_npc(game, OrganActor)
-    actor.class = {.ENVIRONMENT}
+    actor.class = {.ENVIRONMENT, .FRIENDLY} if friendly else {.ENVIRONMENT, .HOSTILE}
     actor.organ_kind = .FACTORY
 
     actor.max_energy = 4
+    actor.actions_per_turn = 1
 
     actor.pos = pos
     actor.ignore_dir_graphics = true
