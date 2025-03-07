@@ -33,6 +33,7 @@ DummyAnimateAction :: struct {
 // This doesn't imply a "rest", it implies that no action
 // was performed. In the hero, this will wait for input
 NoAction :: struct {
+    rest: bool,
 }
 
 
@@ -40,6 +41,7 @@ ChargeSuckAction :: struct {
     wire: ^SubscaleWire,
     pos: [2]int,
     charge_index: int,
+    to_probe: ^ProbeActor,
 }
 
 dummy_animate_action :: proc(by: ^Actor, time: f32 = 0.0) -> (out: Action) {
@@ -49,8 +51,8 @@ dummy_animate_action :: proc(by: ^Actor, time: f32 = 0.0) -> (out: Action) {
     return
 }
 
-no_action :: proc() -> (out: Action) {
-    out.variant = NoAction{}
+no_action :: proc(rest := false) -> (out: Action) {
+    out.variant = NoAction{rest=rest}
     return
 }
 
@@ -105,6 +107,24 @@ move_action :: proc(actor: ^Actor, dir: Direction, steps: int) -> Action {
     if is_subscale {
         wmap = subscale.subscale_of.scale_kind.(FullscaleActor).subscale.tmap
         sof = subscale.subscale_of
+    } else {
+        // Check that we have enough energy in engines
+        self_subscale := actor.scale_kind.(FullscaleActor).subscale
+
+        found_any := false
+        for engine in self_subscale.engines {
+            if engine.energy > 0 {
+                found_any = true
+                break
+            }
+        }
+
+        if !found_any {
+            if actor == &actor.in_game.hero {
+                game_push_message(actor.in_game, "Unable to move, not enough energy in engines!")
+                return no_action(true)
+            }
+        }
     }
 
     swap_actor: ^Actor = nil
@@ -219,6 +239,22 @@ animate_turn_action :: proc(action: Action, prog: f32) -> f32 {
 act_charge_suck_action :: proc(action: Action) {
     suck := action.variant.(ChargeSuckAction)
     unordered_remove(&suck.wire.charges, suck.charge_index)
+    if suck.to_probe.energy == suck.to_probe.max_energy {
+        // Give energy to cortex
+        suck.to_probe.cortex.extra_energy += 1
+        hero_fscale := suck.to_probe.in_game.hero.scale_kind.(FullscaleActor)
+        sucked_from := action.by_actor.scale_kind.(SubscaleActor).subscale_of
+
+        if suck.to_probe.cortex == hero_fscale.subscale.cortex {
+            suck.to_probe.in_game.income += 1
+        }
+        if sucked_from != suck.to_probe.cortex.scale_kind.(SubscaleActor).subscale_of {
+            // Damage, as we take energy away
+            sucked_from.health -= 1
+        }
+    } else {
+        suck.to_probe.energy += 1
+    }
 }
 
 act_move_action :: proc(action: Action) {
@@ -230,6 +266,18 @@ act_move_action :: proc(action: Action) {
         move.swap_actor.pos = move.swap_pos
         move.swap_actor.doffset = [2]f32{0.0, 0.0}
     }
+
+    fscale, is_fullscale := action.by_actor.scale_kind.(FullscaleActor)
+    if is_fullscale {
+        self_subscale := fscale.subscale
+        for engine in self_subscale.engines {
+            if engine.energy > 0 {
+                engine.energy -= 1
+                break
+            }
+        }
+    }
+
 }
 
 act_turn_action :: proc(action: Action) {

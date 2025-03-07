@@ -55,6 +55,7 @@ subscale_wire_update :: proc(wire: ^SubscaleWire) {
         if wire.charges[i] > len(wire.steps) {
             unordered_remove(&wire.charges, i)
             wire.end_actor.energy += 1
+            wire.end_actor.energy = min(wire.end_actor.energy, wire.end_actor.max_energy)
         } else {
             wire.charges[i] += 1
             i += 1
@@ -140,6 +141,8 @@ Actor :: struct {
     dir: Direction,
     in_game: ^Game,
 
+    health: int,
+
     scale_kind: union #no_nil{
         FullscaleActor,
         SubscaleActor
@@ -160,6 +163,9 @@ HeroActor :: struct {
 }
 
 ProbeActor :: struct {
+    energy: int,
+    max_energy: int,
+    cortex: ^OrganActor,
     using base: Actor
 }
 
@@ -213,7 +219,9 @@ OrganKind :: enum {
 
 OrganActor :: struct {
     energy: int,
+    extra_energy: int,
     organ_kind: OrganKind,
+    max_energy: int,
     using base: Actor
 }
 
@@ -222,6 +230,8 @@ TurretActor :: struct {
     target_wires: bool,
     // Damage to target, or energy (negative means healing / energy gen)
     damage: int,
+
+    probe: ^ProbeActor,
 
     target_radius: f32,
     using base: Actor
@@ -259,6 +269,7 @@ destroy_actor :: proc(actor: ^Actor) {
 create_hero :: proc(game: ^Game, pos: [2]int) {
     out := &game.hero
     out.kind = &game.hero;
+    out.health = 500
     out.in_game = game
     out.class = {.HERO, .FRIENDLY}
     out.actions_per_turn = 1
@@ -285,18 +296,21 @@ create_hero :: proc(game: ^Game, pos: [2]int) {
     return
 }
 
-create_probe :: proc(game: ^Game, pos: [2]int) {
+create_probe :: proc(game: ^Game, pos: [2]int, owner_cortex: ^OrganActor) {
     out := &game.probe
     out.kind = &game.probe
     out.in_game = game
     out.class = {.HERO, .FRIENDLY}
     out.pos = pos
+    out.cortex = owner_cortex
     out.dir = .NORTH
     out.alive = true
     out.sprite = get_texture(&game.assets, "res/agents/probe.png")
     out.sprite_rect = rl.Rectangle{0, 0, f32(out.sprite.width), f32(out.sprite.height)}
     out.sprite_size = [2]int{1, 1}
     out.actions_per_turn = SUBSCALE_ACTIONS_PER_TURN
+
+    out.max_energy = 5
 
     out.scale_kind = SubscaleActor{
         subscale_of = &game.hero
@@ -312,6 +326,8 @@ take_turn_hero :: proc(actor: ^HeroActor) -> Action {
     } else if rl.IsKeyPressed(.SPACE) {
         actor.in_game.playing_subscale = true
         return no_action()
+    } else if rl.IsKeyPressed(.R) {
+        return no_action(true)
     }
     // HJKL turning / motion
     // Shift+HJKL turning only
@@ -511,7 +527,8 @@ take_turn_monster :: proc(actor: ^NPCActor) -> Action {
 take_turn_organ :: proc(actor: ^OrganActor) -> Action {
     if actor.organ_kind == .CORTEX {
         if actor.actions_taken == 0 {
-            actor.energy = 16
+            actor.energy = 16 + actor.extra_energy
+            actor.extra_energy = 0
         }
 
         for &wire in actor.scale_kind.(SubscaleActor).subscale_of.scale_kind.(FullscaleActor).subscale.wire {
@@ -549,7 +566,8 @@ take_turn_turret :: proc(actor: ^TurretActor) -> Action {
                     target := ChargeSuckAction{
                         wire = &wire,
                         pos = pos,
-                        charge_index = charge_idx
+                        charge_index = charge_idx,
+                        to_probe = actor.probe,
                     }
                     append(&possible, target)
                 }
@@ -854,13 +872,18 @@ create_turret :: proc(game: ^Game, pos: [2]int, inside: ^Actor) -> ^TurretActor 
     return actor
 }
 
-create_collector :: proc(game: ^Game, pos: [2]int, inside: ^Actor) -> ^TurretActor {
+create_collector :: proc(game: ^Game, pos: [2]int, inside: ^Actor, for_probe: ^ProbeActor = nil) -> ^TurretActor {
     actor := game_create_npc(game, TurretActor)
     actor.class = {.TURRET}
-    actor.actions_per_turn = 2
+    actor.actions_per_turn = 4
     actor.target_wires = true
-    actor.target_radius = 4.0
+    actor.target_radius = 6.0
     actor.damage = 1
+
+    actor.probe = for_probe
+    if actor.probe == nil {
+        actor.probe = &game.probe
+    }
 
     actor.pos = pos
     actor.dir = .NORTH
@@ -962,6 +985,7 @@ create_engine :: proc(game: ^Game, pos: [2]int, inside: ^Actor, orient: c.int) -
     actor := game_create_npc(game, OrganActor)
     actor.class = {.ENVIRONMENT}
     actor.organ_kind = .ENGINE
+    actor.max_energy = 3
 
 
     actor.pos = pos
@@ -984,6 +1008,7 @@ create_radar :: proc(game: ^Game, pos: [2]int, inside: ^Actor, orient: c.int) ->
     actor := game_create_npc(game, OrganActor)
     actor.class = {.ENVIRONMENT}
     actor.organ_kind = .RADAR
+    actor.max_energy = 1
 
 
     actor.pos = pos
@@ -1005,6 +1030,7 @@ create_radar :: proc(game: ^Game, pos: [2]int, inside: ^Actor, orient: c.int) ->
 create_sentinel :: proc(game: ^Game, pos: [2]int) -> ^Actor {
     actor := game_create_npc(game, NPCActor)
     actor.actions_per_turn = 1
+    actor.health = 150
     actor.class = {.HOSTILE}
     actor.swappable = true
     actor.impedes_movement = true
@@ -1039,6 +1065,7 @@ create_factory :: proc(game: ^Game, pos: [2]int, inside: ^Actor, orient: c.int) 
     actor.class = {.ENVIRONMENT}
     actor.organ_kind = .FACTORY
 
+    actor.max_energy = 4
 
     actor.pos = pos
     actor.ignore_dir_graphics = true

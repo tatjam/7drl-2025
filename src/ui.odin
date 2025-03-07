@@ -2,6 +2,7 @@ package src
 
 import rl "vendor:raylib"
 import c "core:c"
+import "core:fmt"
 
 GAME_PANEL_W :: 0.56
 GAME_PANEL_H :: 0.7
@@ -39,9 +40,78 @@ scalepanel_draw :: proc(game: ^Game, startw: c.int, endh: c.int) {
     rl.DrawRectangleLines(startw, 0, rl.GetScreenWidth() - startw, endh, rl.WHITE)
 }
 
+BIG_SKIP :: 14.0
+SKIP :: 12.0
+
+userpanel_summary :: proc(game: ^Game, actor: ^Actor, sscale: ^SubscaleMap, w: f32, h: ^f32) {
+
+    tot_engine_energy := 0
+    tot_max_engine_energy := 0
+    tot_radar_energy := 0
+    tot_max_radar_energy := 0
+    tot_factory_energy := 0
+    tot_max_factory_energy := 0
+    for engine in sscale.engines {
+        tot_engine_energy += engine.energy
+        tot_max_engine_energy += engine.max_energy
+    }
+    for radar in sscale.radars {
+        tot_radar_energy += radar.energy
+        tot_max_radar_energy += radar.max_energy
+    }
+    for factory in sscale.factories {
+        tot_factory_energy += factory.energy
+        tot_max_factory_energy += factory.max_energy
+    }
+
+    str := fmt.ctprint(" Health", actor.health)
+    rl.DrawTextEx(game.uifont, str, [2]f32{w, h^}, f32(game.uifont.baseSize), 4, rl.WHITE)
+    h^ += SKIP
+    str = fmt.ctprint(" Engine", tot_engine_energy, "/", tot_max_engine_energy)
+    rl.DrawTextEx(game.uifont, str, [2]f32{w, h^}, f32(game.uifont.baseSize), 4, rl.WHITE)
+    h^ += SKIP
+    str = fmt.ctprint(" Radar", tot_radar_energy, "/", tot_max_radar_energy)
+    rl.DrawTextEx(game.uifont, str, [2]f32{w, h^}, f32(game.uifont.baseSize), 4, rl.WHITE)
+    h^ += SKIP
+    str = fmt.ctprint(" Factory", tot_factory_energy, "/", tot_max_factory_energy)
+    rl.DrawTextEx(game.uifont, str, [2]f32{w, h^}, f32(game.uifont.baseSize), 4, rl.WHITE)
+    h^ += SKIP
+}
+
 userpanel_draw :: proc(game: ^Game, startw: c.int, starth: c.int, endw: c.int) {
     rl.DrawRectangleLines(startw, starth,
         endw - startw, rl.GetScreenHeight() - starth, rl.WHITE)
+
+
+    // Self-energy
+    h := f32(starth)
+    w := f32(startw + 4.0);
+
+    str := fmt.ctprint("Probe: ", game.probe.energy, "/", game.probe.max_energy)
+    rl.DrawTextEx(game.uifont, str, [2]f32{w, h}, f32(game.uifont.baseSize), 4, rl.WHITE)
+    h += BIG_SKIP
+
+    str = fmt.ctprint("Income: ", game.last_income)
+    rl.DrawTextEx(game.uifont, str, [2]f32{w, h}, f32(game.uifont.baseSize), 4, rl.WHITE)
+    h += BIG_SKIP
+
+    rl.DrawTextEx(game.uifont, "Self", [2]f32{w, h}, f32(game.uifont.baseSize), 4, rl.WHITE)
+    h += BIG_SKIP
+
+    self_scale := game.hero.scale_kind.(FullscaleActor).subscale
+    userpanel_summary(game, &game.hero, &self_scale, w, &h)
+
+
+
+    // Target-energy
+    rl.DrawTextEx(game.uifont, "Target", [2]f32{w, h}, f32(game.uifont.baseSize), 4, rl.WHITE)
+    h += BIG_SKIP
+
+
+    if game.focus_subscale != nil && game.focus_subscale != &game.hero {
+        fscale := game.focus_subscale.scale_kind.(FullscaleActor).subscale
+        userpanel_summary(game, game.focus_subscale, &fscale, w, &h)
+    }
 
 }
 

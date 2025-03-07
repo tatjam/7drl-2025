@@ -22,6 +22,8 @@ BuildingType :: enum {
 }
 
 Game :: struct {
+    last_income: int,
+    income: int,
     turns_remain: bool,
 
     skip_further_anims: bool,
@@ -255,8 +257,13 @@ game_update_turn :: proc(game: ^Game) {
 
             act, is_ok := game.cur_action.(Action)
             assert(is_ok)
-            _, is_none := act.variant.(NoAction)
-            if is_none do break // Continue processing user input
+            no_act, is_none := act.variant.(NoAction)
+            if is_none && no_act.rest && !game.playing_subscale {
+                // Give some energy to probe, to prevent player from getting stuck
+                game.probe.energy += 1
+                game.probe.energy = min(game.probe.energy, game.probe.max_energy)
+            }
+            if is_none && !no_act.rest do break // Continue processing user input
 
             game.turni += 1
 
@@ -278,6 +285,8 @@ game_update_turn :: proc(game: ^Game) {
                     }
                     game.turns_remain = false
                     game.skip_further_anims = false
+                    game.last_income = game.income
+                    game.income = 0
 
                     break
                 }

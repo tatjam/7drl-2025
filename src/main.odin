@@ -50,8 +50,9 @@ main :: proc() {
 
     startpos := tilemap_find_spawn_pos(&game, nil)
     create_hero(&game, startpos)
+    hero_cortex := game.hero.scale_kind.(FullscaleActor).subscale.cortex
     probestartpos := tilemap_find_spawn_pos(&game, &game.hero)
-    create_probe(&game, probestartpos)
+    create_probe(&game, probestartpos, hero_cortex)
     game.focus_subscale = &game.hero
     // Do this so player starts functional
     for i:=1; i < 100; i+=1 {
