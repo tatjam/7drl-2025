@@ -10,7 +10,9 @@ Action :: struct {
     by_actor: ^Actor,
     need_see: [dynamic][2]int,
     force_animate: bool,
-    variant: union{NoAction, MoveAction, TurnAction, ShootProbeAction, DummyAnimateAction}
+    variant: union{
+        NoAction, MoveAction, TurnAction, ShootProbeAction, DummyAnimateAction,
+        ChargeSuckAction}
 }
 
 MoveAction :: struct {
@@ -34,6 +36,12 @@ NoAction :: struct {
 }
 
 
+ChargeSuckAction :: struct {
+    wire: ^SubscaleWire,
+    pos: [2]int,
+    charge_index: int,
+}
+
 dummy_animate_action :: proc(by: ^Actor, time: f32 = 0.0) -> (out: Action) {
     out.variant = DummyAnimateAction{wait = time}
     out.force_animate = true
@@ -44,6 +52,25 @@ dummy_animate_action :: proc(by: ^Actor, time: f32 = 0.0) -> (out: Action) {
 no_action :: proc() -> (out: Action) {
     out.variant = NoAction{}
     return
+}
+
+delta_to_dir :: proc(delta: [2]$T) -> Direction {
+    dir := Direction.NORTH
+    if abs(delta.x) > abs(delta.y) {
+        if delta.x > 0 {
+            dir = .EAST
+        } else {
+            dir = .WEST
+        }
+    } else {
+        if delta.y > 0 {
+            dir = .SOUTH
+        } else {
+            dir = .NORTH
+        }
+    }
+
+    return dir
 }
 
 dir_to_delta :: proc(dir: Direction) -> [2]int {
@@ -60,6 +87,7 @@ dir_to_delta :: proc(dir: Direction) -> [2]int {
     }
     return delta
 }
+
 
 // Clamps to prevent skipping walls
 move_action :: proc(actor: ^Actor, dir: Direction, steps: int) -> Action {
@@ -124,6 +152,29 @@ move_action :: proc(actor: ^Actor, dir: Direction, steps: int) -> Action {
 
 }
 
+animate_charge_suck_action :: proc(action: Action, prog: f32) -> f32 {
+    CHARGE_SUCK_ANIM_TIME :: 0.15
+    game := action.by_actor.in_game
+    suck := action.variant.(ChargeSuckAction)
+
+    if len(game.fx) == 0 {
+        fx := new(ActionFX)
+        fx.in_subscale = action.by_actor.scale_kind.(SubscaleActor).subscale_of
+        fx.pos = linalg.to_f32(suck.pos)
+        fx.sprite_tex = get_texture(&game.assets, "res/charge.png")
+        fx.scale = 0.1
+        fx.tint = rl.WHITE
+        append(&game.fx, fx)
+    }
+    fx := game.fx[0]
+
+    delta := linalg.to_f32(action.by_actor.pos - suck.pos)
+    fx.pos = linalg.to_f32(suck.pos) + delta * prog / CHARGE_SUCK_ANIM_TIME
+    fx.pos += [2]f32{0.5, 0.5}
+
+    return CHARGE_SUCK_ANIM_TIME
+}
+
 animate_move_action :: proc(action: Action, prog: f32) -> f32 {
     MOVE_ANIM_TIME :: 0.15
     SUBSCALE_MOVE_ANIM_TIME :: 0.1
@@ -159,6 +210,11 @@ animate_turn_action :: proc(action: Action, prog: f32) -> f32 {
     return ROT_ANIM_TIME
 }
 
+act_charge_suck_action :: proc(action: Action) {
+    suck := action.variant.(ChargeSuckAction)
+    unordered_remove(&suck.wire.charges, suck.charge_index)
+}
+
 act_move_action :: proc(action: Action) {
     move := action.variant.(MoveAction)
     action.by_actor.pos = move.endpos
@@ -188,6 +244,8 @@ animate_action :: proc(action: Action, prog: f32) -> f32 {
         return animate_shoot_probe_action(action, prog)
     case DummyAnimateAction:
         return var.wait
+    case ChargeSuckAction:
+        return animate_charge_suck_action(action, prog)
     case NoAction:
         assert(false)
         return 0.0
@@ -204,6 +262,8 @@ act_action :: proc(action: Action) {
         act_turn_action(action)
     case ShootProbeAction:
         act_shoot_probe_action(action)
+    case ChargeSuckAction:
+        act_charge_suck_action(action)
     case DummyAnimateAction:
     case NoAction:
     case:
@@ -301,20 +361,7 @@ act_shoot_probe_action :: proc(action: Action) {
     } else {
         // Find entrypoint from direction
         delta := linalg.to_f32(shoot.endpos - shoot.startpos)
-        dir := Direction.NORTH
-        if abs(delta.x) > abs(delta.y) {
-            if delta.x > 0 {
-                dir = .EAST
-            } else {
-                dir = .WEST
-            }
-        } else {
-            if delta.y > 0 {
-                dir = .SOUTH
-            } else {
-                dir = .NORTH
-            }
-        }
+        dir := delta_to_dir(delta)
         // But ofcourse, entity is rotated
         dir = entrydir(dir, shoot.hit.dir)
 

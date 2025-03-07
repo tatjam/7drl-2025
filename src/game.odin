@@ -145,7 +145,7 @@ game_do_action :: proc(game: ^Game, action: Action, force_anim := false) -> bool
     }
     else {
         // Within a subscale actor, all actions are visible
-        if game.focus_subscale != subscale.subscale_of {
+        if game.focus_subscale != subscale.subscale_of || !game.playing_subscale {
             game.anim_progress = -1.0
             act_action(action)
             return false
@@ -192,7 +192,7 @@ game_update_turn_for :: proc(game: ^Game, actor: ^Actor, force_anim := false) ->
         case ^OrganActor:
             action = take_turn_organ(v)
         case ^TurretActor:
-            action = no_action()
+            action = take_turn_turret(v)
         case nil:
             assert(false)
     }
@@ -211,8 +211,6 @@ game_update_turn_for :: proc(game: ^Game, actor: ^Actor, force_anim := false) ->
 
     if game_do_action(game, action) {
         return true
-    } else {
-        act_action(action)
     }
 
     return false
@@ -559,5 +557,5 @@ game_draw_fx :: proc(fx: ^ActionFX) {
     origin := [2]f32{source.width * fx.scale * 0.5, source.height * fx.scale * 0.5}
 
     rl.DrawTexturePro(fx.sprite_tex, source, dest, origin, fx.angle, fx.tint)
-    rl.DrawCircleV(fx.pos, 0.1, rl.RED)
+    //rl.DrawCircleV(fx.pos, 0.1, fx.tint)
 }

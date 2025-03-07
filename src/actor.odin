@@ -168,10 +168,14 @@ NPCState :: struct {
 }
 
 ChaserAI :: struct {
+    max_turns_without_vision:int,
 
+    turns_without_vision: int,
+    last_seen: [2]int,
+    min_dist: f32,
 }
 
-MovementAI :: union {
+TargetAI :: union {
     ChaserAI,
 }
 
@@ -188,10 +192,14 @@ AttackAI :: union {
 
 
 NPCActor :: struct {
-    mov_ai: MovementAI,
+    target_ai: TargetAI,
     loiter_ai: LoiterAI,
     attack_ai: AttackAI,
-    target_acquire_class: ActorClass,
+
+    target_acquire_class: bit_set[ActorClass],
+
+    target: ^Actor,
+    require_los: bool,
 
     using base: Actor
 }
@@ -210,6 +218,12 @@ OrganActor :: struct {
 }
 
 TurretActor :: struct {
+    target_bitset: bit_set[ActorClass],
+    target_wires: bool,
+    // Damage to target, or energy (negative means healing / energy gen)
+    damage: int,
+
+    target_radius: f32,
     using base: Actor
 }
 
@@ -349,7 +363,148 @@ take_turn_probe :: proc(actor: ^ProbeActor) -> Action {
     return move_action(actor, dir, 1)
 }
 
+ai_can_target :: proc(ai: ^NPCActor, target: ^Actor) -> bool {
+    sscale_ai, is_ai_subscale := ai.scale_kind.(SubscaleActor)
+    sscale_tgt, is_tgt_subscale := target.scale_kind.(SubscaleActor)
+
+    compatible := false
+    for tag in ai.target_acquire_class {
+        if tag in target.class {
+           compatible = true
+            break
+        }
+    }
+
+    if !compatible do return false
+
+    if is_ai_subscale && is_tgt_subscale && sscale_ai.subscale_of == sscale_tgt.subscale_of {
+        return true
+    }
+    if !is_ai_subscale && !is_tgt_subscale {
+        if ai.require_los {
+            spos := linalg.to_f32(ai.pos) + [2]f32{0.5, 0.5}
+            epos := linalg.to_f32(target.pos) + [2]f32{0.5, 0.5}
+            visible := !tilemap_raycast(ai.in_game.worldmap, spos, epos)
+            return visible
+        } else {
+            return true
+        }
+    }
+
+    return false
+}
+
+ai_find_target :: proc(actor: ^NPCActor) -> ^Actor {
+    if ai_can_target(actor, &actor.in_game.hero) do return &actor.in_game.hero
+    if ai_can_target(actor, &actor.in_game.probe) do return &actor.in_game.probe
+
+    for other_actor in actor.in_game.npcs {
+        if other_actor == actor do continue
+        if ai_can_target(actor, other_actor) do return other_actor
+    }
+
+    return nil
+}
+
+ai_deacquire_target :: proc(actor: ^NPCActor) {
+    actor.target = nil
+}
+
+ai_acquire_target :: proc(actor: ^NPCActor, target: ^Actor) {
+    actor.target = target
+
+    switch &ai in actor.target_ai {
+    case ChaserAI:
+        ai.turns_without_vision = 0
+    }
+}
+
+ai_random_move_take_turn :: proc(actor: ^NPCActor) -> Action {
+    return no_action()
+}
+
+ai_chaser_take_turn :: proc(actor: ^NPCActor) -> Action {
+    chaser := actor.target_ai.(ChaserAI)
+
+    obj: [2]int
+    wmap: ^Tilemap
+    if actor.require_los {
+        wmap = &actor.in_game.worldmap
+
+        spos := linalg.to_f32(actor.pos) + [2]f32{0.5, 0.5}
+        epos := linalg.to_f32(actor.target.pos) + [2]f32{0.5, 0.5}
+        in_sight := !tilemap_raycast(wmap^, spos, epos)
+        if in_sight {
+            chaser.last_seen = actor.target.pos
+        } else {
+            chaser.turns_without_vision += 1
+            if chaser.turns_without_vision >= chaser.max_turns_without_vision {
+                ai_deacquire_target(actor)
+            }
+        }
+
+        // TODO: Otherwise excessively dumb
+        // obj = actor.target.pos if in_sight else chaser.last_seen
+        obj = actor.target.pos
+
+    } else {
+        sscale, is_subscale := actor.scale_kind.(SubscaleActor)
+        if is_subscale {
+            fscale := &sscale.subscale_of.scale_kind.(FullscaleActor)
+            wmap = &fscale.subscale.tmap
+        } else {
+            wmap = &actor.in_game.worldmap
+        }
+        obj = actor.target.pos
+    }
+
+    path := astar_wall(actor.pos, obj, wmap.walls[:], wmap.width, max(int), 0, wmap.outside[:])
+    if len(path) > 1 {
+        next := path[1]
+
+        nextf := linalg.to_f32(next) + [2]f32{0.5, 0.5}
+        tgtf := linalg.to_f32(actor.target.pos) + [2]f32{0.5, 0.5}
+
+        delta := next - actor.pos
+        dir := delta_to_dir(delta)
+        if actor.dir != dir {
+            return turn_action(actor, dir)
+        }
+
+        if linalg.distance(nextf, tgtf) <= chaser.min_dist {
+            return no_action()
+        }
+
+        return move_action(actor, dir, 1)
+
+    }
+
+    return no_action()
+}
+
 take_turn_monster :: proc(actor: ^NPCActor) -> Action {
+    if actor.target == nil {
+        // Target acquire
+        ntarget := ai_find_target(actor)
+        if ntarget != nil {
+            ai_acquire_target(actor, ntarget)
+        }
+    }
+
+    if actor.target == nil {
+        // Loiter
+        switch v in actor.loiter_ai {
+        case RandomMoveAI:
+            return ai_random_move_take_turn(actor)
+        }
+    } else {
+        // Target
+        switch v in actor.target_ai {
+        case ChaserAI:
+            return ai_chaser_take_turn(actor)
+        }
+    }
+
     return no_action()
 }
 
@@ -373,6 +528,53 @@ take_turn_organ :: proc(actor: ^OrganActor) -> Action {
     return no_action()
 }
 
+take_turn_turret :: proc(actor: ^TurretActor) -> Action {
+    sof := actor.scale_kind.(SubscaleActor).subscale_of
+    smap := sof.scale_kind.(FullscaleActor).subscale
+
+    if actor.target_wires && actor.damage > 0 {
+
+        // Search a random wire in range
+        possible := make([dynamic]ChargeSuckAction, context.temp_allocator)
+        defer delete(possible)
+
+        for &wire in smap.wire {
+            for charge_idx := 0; charge_idx < len(wire.charges); charge_idx+=1 {
+                energy := wire.charges[charge_idx]
+                if energy < 0 || energy >= len(wire.steps) do continue
+                pos := wire.steps[energy]
+
+                delta := linalg.to_f32(pos - actor.pos)
+                if linalg.length(delta) <= actor.target_radius {
+                    target := ChargeSuckAction{
+                        wire = &wire,
+                        pos = pos,
+                        charge_index = charge_idx
+                    }
+                    append(&possible, target)
+                }
+            }
+        }
+
+        if len(possible) == 0 {
+            return no_action()
+        }
+
+        return Action{
+            by_actor = actor,
+            variant = rand.choice(possible[:]),
+        }
+
+
+
+    } else if actor.target_wires && actor.damage < 0 {
+
+    } else {
+
+    }
+
+    return no_action()
+}
 
 create_subscale_map :: proc(for_actor: ^Actor, fname: string, sets: DungeonSettings) {
 
@@ -634,7 +836,9 @@ draw_actor :: proc(actor: ^Actor) {
 create_turret :: proc(game: ^Game, pos: [2]int, inside: ^Actor) -> ^TurretActor {
     actor := game_create_npc(game, TurretActor)
     actor.class = {.TURRET}
-    actor.actions_per_turn = SUBSCALE_ACTIONS_PER_TURN
+    actor.actions_per_turn = 4
+    actor.target_bitset = {.HOSTILE}
+    actor.damage = 1
 
     actor.pos = pos
     actor.dir = .NORTH
@@ -653,7 +857,10 @@ create_turret :: proc(game: ^Game, pos: [2]int, inside: ^Actor) -> ^TurretActor 
 create_collector :: proc(game: ^Game, pos: [2]int, inside: ^Actor) -> ^TurretActor {
     actor := game_create_npc(game, TurretActor)
     actor.class = {.TURRET}
-    actor.actions_per_turn = SUBSCALE_ACTIONS_PER_TURN
+    actor.actions_per_turn = 2
+    actor.target_wires = true
+    actor.target_radius = 4.0
+    actor.damage = 1
 
     actor.pos = pos
     actor.dir = .NORTH
@@ -797,6 +1004,7 @@ create_radar :: proc(game: ^Game, pos: [2]int, inside: ^Actor, orient: c.int) ->
 
 create_sentinel :: proc(game: ^Game, pos: [2]int) -> ^Actor {
     actor := game_create_npc(game, NPCActor)
+    actor.actions_per_turn = 1
     actor.class = {.HOSTILE}
     actor.swappable = true
     actor.impedes_movement = true
@@ -806,6 +1014,11 @@ create_sentinel :: proc(game: ^Game, pos: [2]int) -> ^Actor {
     actor.sprite = get_texture(&game.assets, "res/agents/sentinel.png")
     actor.sprite_rect = rl.Rectangle{0, 0, f32(actor.sprite.width), f32(actor.sprite.height)}
     actor.sprite_size = [2]int{1, 1}
+
+    actor.require_los = true
+    actor.target_ai = ChaserAI{max_turns_without_vision = 3, min_dist = 2.0}
+    actor.loiter_ai = RandomMoveAI{}
+    actor.target_acquire_class = {.HERO}
 
     actor.scale_kind = FullscaleActor{}
     fs := &actor.scale_kind.(FullscaleActor)

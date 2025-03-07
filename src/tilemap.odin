@@ -150,8 +150,7 @@ world_tilemap_cast_shadows :: proc(tm: Tilemap, caster: [2]f32,
 }
 
 // Should be fairly efficient
-tilemap_raycast :: proc(tm: Tilemap, start: [2]f32, end: [2]f32) -> (visible: bool) {
-    visible = true
+tilemap_raycast :: proc(tm: Tilemap, start: [2]f32, end: [2]f32) -> (hit: bool) {
 
     // Raycasting algorithm, kind of similar to Wolfenstein 3D
     // where we just evaluate at the edges of the tiles along
@@ -189,7 +188,7 @@ tilemap_raycast :: proc(tm: Tilemap, start: [2]f32, end: [2]f32) -> (visible: bo
         side_y = (f32(cell.y) + 1 - start.y) * delta_y
     }
 
-    hit := false
+    hit = false
     for {
         if cell == endcell {
             break
@@ -215,7 +214,7 @@ tilemap_raycast :: proc(tm: Tilemap, start: [2]f32, end: [2]f32) -> (visible: bo
         }
     }
 
-    return hit
+    return
 }
 
 tile_center :: proc(pos: [2]int) -> [2]f32 {
