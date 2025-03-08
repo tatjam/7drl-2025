@@ -59,10 +59,13 @@ main :: proc() {
         take_turn_organ(game.hero.scale_kind.(FullscaleActor).subscale.cortex)
     }
 
-    for i := 0; i < 1; i += 1{
+    for i := 0; i < 2; i += 1{
         spawnpos := tilemap_find_spawn_pos(&game, nil)
-        spawnpos = game.hero.pos + [2]int{0, -1}
         create_mechanic(&game, spawnpos)
+    }
+    for i := 0; i < 5; i += 1{
+        spawnpos := tilemap_find_spawn_pos(&game, nil)
+        create_sentinel(&game, spawnpos)
     }
 
     for !rl.WindowShouldClose() {

@@ -269,7 +269,7 @@ destroy_actor :: proc(game: ^Game, actor: ^Actor) {
             unordered_remove(&game.npcs, i)
         }
     }
-    fscale, is_fscale := actor.scale_kind.(FullscaleActor)
+    fscale, is_fscale := &actor.scale_kind.(FullscaleActor)
     if is_fscale {
         for other_npc in game.npcs {
             sscale, is_scale := other_npc.scale_kind.(SubscaleActor)
@@ -277,6 +277,12 @@ destroy_actor :: proc(game: ^Game, actor: ^Actor) {
             if sscale.subscale_of != actor do continue
             destroy_actor(game, other_npc)
         }
+        if (&game.probe.scale_kind.(SubscaleActor)).subscale_of == actor {
+            (&game.probe.scale_kind.(SubscaleActor)).subscale_of = &game.hero
+            game.focus_subscale = &game.hero
+            game.playing_subscale = false
+        }
+    } else {
     }
 
     destroy_subscale_map(actor)

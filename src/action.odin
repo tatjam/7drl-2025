@@ -356,6 +356,9 @@ act_charge_suck_action :: proc(action: Action) {
         if sucked_from != suck.to_probe.cortex.scale_kind.(SubscaleActor).subscale_of {
             // Damage, as we take energy away
             sucked_from.health -= 1
+            if sucked_from.health <= 0 {
+                sucked_from.alive = false
+            }
         }
     } else {
         suck.to_probe.energy += 1
