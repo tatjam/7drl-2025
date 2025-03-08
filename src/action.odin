@@ -12,7 +12,7 @@ Action :: struct {
     force_animate: bool,
     variant: union{
         NoAction, MoveAction, TurnAction, ShootProbeAction, DummyAnimateAction,
-        ChargeSuckAction, CreateSolitonAction, TurretShootAction}
+        ChargeSuckAction, CreateSolitonAction, TurretShootAction, MeleeAttackAction}
 }
 
 MoveAction :: struct {
@@ -51,6 +51,37 @@ TurretShootAction :: struct {
 
 CreateSolitonAction :: struct {
 
+}
+
+MeleeAttackAction :: struct {
+    target: ^Actor,
+    damage: int,
+    kill_self: bool,
+}
+
+melee_attack_action :: proc(by: ^Actor, target: ^Actor, damage: int, kill_self: bool) -> (out: Action) {
+    if !target.killable do return no_action()
+
+    return Action{by_actor=by, variant=MeleeAttackAction{
+        target=target,
+        damage=damage,
+        kill_self=kill_self,
+    }}
+}
+
+act_melee_attack_action :: proc(act: Action) {
+    actor := act.by_actor
+    target := act.variant.(MeleeAttackAction).target
+    v := act.variant.(MeleeAttackAction)
+
+    target.health -= 1
+    if target.health < 0 {
+        target.alive = false
+    }
+    if v.kill_self {
+        actor.health = 0
+        actor.alive = false
+    }
 }
 
 dummy_animate_action :: proc(by: ^Actor, time: f32 = 0.0) -> (out: Action) {
@@ -377,6 +408,9 @@ animate_action :: proc(action: Action, prog: f32) -> f32 {
     case CreateSolitonAction:
         // TODO
         return 0.0
+    case MeleeAttackAction:
+        // TODO
+        return 0.0
     case TurretShootAction:
         return animate_turret_shoot_action(action, prog)
     case NoAction:
@@ -401,6 +435,8 @@ act_action :: proc(action: Action) {
         act_create_soliton_action(action)
     case TurretShootAction:
         act_turret_shoot_action(action)
+    case MeleeAttackAction:
+        act_melee_attack_action(action)
     case DummyAnimateAction:
     case NoAction:
     case:

@@ -6,7 +6,7 @@ import "core:math/rand"
 import "core:c"
 import "core:log"
 
-SUBSCALE_ACTIONS_PER_TURN :: 8
+SUBSCALE_ACTIONS_PER_TURN :: 16
 
 Direction :: enum {
     NORTH,
@@ -194,7 +194,18 @@ LoiterAI :: union {
     RandomMoveAI
 }
 
+MeleeAttackAI :: struct {
+    destroy_self: bool,
+    range: f32,
+}
+
+ScaleProbeShootAttackAI :: struct {
+
+}
+
 AttackAI :: union {
+    MeleeAttackAI,
+    ScaleProbeShootAttackAI,
 }
 
 
@@ -438,12 +449,13 @@ ai_can_target :: proc(ai: ^NPCActor, target: ^Actor) -> bool {
 
 ai_find_target :: proc(actor: ^NPCActor) -> ^Actor {
     if ai_can_target(actor, &actor.in_game.hero) do return &actor.in_game.hero
-    if ai_can_target(actor, &actor.in_game.probe) do return &actor.in_game.probe
 
     for other_actor in actor.in_game.npcs {
         if other_actor == actor do continue
         if ai_can_target(actor, other_actor) do return other_actor
     }
+
+    if ai_can_target(actor, &actor.in_game.probe) do return &actor.in_game.probe
 
     return nil
 }
@@ -462,6 +474,25 @@ ai_acquire_target :: proc(actor: ^NPCActor, target: ^Actor) {
 }
 
 ai_random_move_take_turn :: proc(actor: ^NPCActor) -> Action {
+    return no_action()
+}
+
+ai_attack_take_turn :: proc(actor: ^NPCActor) -> Action {
+    switch v in actor.attack_ai {
+    case MeleeAttackAI:
+        opos := linalg.to_f32(actor.pos)
+        tpos := linalg.to_f32(actor.target.pos)
+        if linalg.distance(opos, tpos) < v.range {
+            if actor.target.killable {
+                return melee_attack_action(actor, actor.target, 1, v.destroy_self)
+            } else {
+                ai_deacquire_target(actor)
+                return no_action()
+            }
+        }
+    case ScaleProbeShootAttackAI:
+    }
+
     return no_action()
 }
 
@@ -507,6 +538,7 @@ ai_chaser_take_turn :: proc(actor: ^NPCActor) -> Action {
 
         nextf := linalg.to_f32(next) + [2]f32{0.5, 0.5}
         tgtf := linalg.to_f32(actor.target.pos) + [2]f32{0.5, 0.5}
+        curf := linalg.to_f32(actor.pos)
 
         delta := next - actor.pos
         dir := delta_to_dir(delta)
@@ -514,10 +546,11 @@ ai_chaser_take_turn :: proc(actor: ^NPCActor) -> Action {
             return turn_action(actor, dir)
         }
 
-        if linalg.distance(nextf, tgtf) <= chaser.min_dist {
-            return no_action()
-        }
+        attack := ai_attack_take_turn(actor)
+        _, is_none := attack.variant.(NoAction)
+        if !is_none do return attack
 
+        if linalg.distance(curf, tgtf) < chaser.min_dist do return no_action()
         return move_action(actor, dir, 1)
 
     }
@@ -947,7 +980,7 @@ create_turret :: proc(game: ^Game, pos: [2]int, inside: ^Actor, for_probe: ^Prob
         actor.target_bitset = {.FRIENDLY}
     }
     actor.killable = true
-    actor.actions_per_turn = 4
+    actor.actions_per_turn = 8
     actor.damage = 1
     actor.target_radius = 4.0
 
@@ -967,17 +1000,21 @@ create_turret :: proc(game: ^Game, pos: [2]int, inside: ^Actor, for_probe: ^Prob
 
 create_collector :: proc(game: ^Game, pos: [2]int, inside: ^Actor, for_probe: ^ProbeActor = nil) -> ^TurretActor {
     actor := game_create_npc(game, TurretActor)
-    actor.class = {.TURRET}
+    actor.probe = for_probe
+    if actor.probe == nil {
+        actor.probe = &game.probe
+    }
+    if .FRIENDLY in actor.probe.class {
+        actor.class = {.TURRET, .FRIENDLY}
+    } else {
+        actor.class = {.TURRET, .HOSTILE}
+    }
     actor.killable = true
     actor.actions_per_turn = 4
     actor.target_wires = true
     actor.target_radius = 4.0
     actor.damage = 1
 
-    actor.probe = for_probe
-    if actor.probe == nil {
-        actor.probe = &game.probe
-    }
 
     actor.pos = pos
     actor.dir = .NORTH
@@ -1126,7 +1163,7 @@ create_melee_soliton :: proc(game: ^Game, pos: [2]int, inside: ^Actor, friend: b
     actor.class = {.FRIENDLY} if friend else {.HOSTILE}
 
     actor.killable = true
-    actor.actions_per_turn = 8
+    actor.actions_per_turn = SUBSCALE_ACTIONS_PER_TURN
     actor.target_acquire_class = {.HOSTILE} if friend else {.FRIENDLY}
 
     actor.pos = pos
@@ -1143,7 +1180,8 @@ create_melee_soliton :: proc(game: ^Game, pos: [2]int, inside: ^Actor, friend: b
 
     actor.scale_kind = SubscaleActor{subscale_of = inside}
 
-    actor.target_ai = ChaserAI{}
+    actor.target_ai = ChaserAI{min_dist = 1.0}
+    actor.attack_ai = MeleeAttackAI{destroy_self = true, range=1.5}
 
     return actor
 
@@ -1198,7 +1236,7 @@ create_mechanic :: proc(game: ^Game, pos: [2]int) -> ^Actor {
     actor.sprite_size = [2]int{1, 1}
 
     actor.require_los = true
-    actor.target_ai = ChaserAI{max_turns_without_vision = 2, min_dist = 2.0}
+    actor.target_ai = ChaserAI{max_turns_without_vision = 4, min_dist = 2.0}
     actor.loiter_ai = RandomMoveAI{}
     actor.target_acquire_class = {.HERO}
 

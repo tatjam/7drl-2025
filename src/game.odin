@@ -171,7 +171,7 @@ game_update_anim :: proc(game: ^Game) {
     t := animate_action(action, game.anim_progress)
     if rl.GetKeyPressed() != rl.KeyboardKey.KEY_NULL {
         game.anim_progress = t
-        game.skip_further_anims = true
+        //game.skip_further_anims = true
         game.start_skipping = rl.GetTime()
     }
 
@@ -231,6 +231,16 @@ game_update_turn_for :: proc(game: ^Game, actor: ^Actor, force_anim := false) ->
 game_update_turn :: proc(game: ^Game) {
     for {
         if game.turni == -1 {
+            if !game.hero.alive {
+                game_push_message(game, "Game over!")
+            }
+            if !game.probe.alive {
+                game.probe.alive = true
+                game.focus_subscale = &game.hero
+                (&game.probe.scale_kind.(SubscaleActor)).subscale_of = &game.hero
+                game.probe.pos = tilemap_find_spawn_pos(game, &game.hero)
+                game_push_message(game, "Probe got killed! Constructing a new one!")
+            }
             // Progress in turn
             has_action := false
             if game.playing_subscale {
@@ -361,14 +371,14 @@ game_build_building :: proc(game: ^Game) {
     pos := game.building_cursor + game.probe.pos
     switch game.building_selected {
     case .COLLECTOR:
-        if game.probe.energy > 4 {
+        if game.probe.energy >= 4 {
             create_collector(game, pos + [2]int{1, 1}, focus)
             game.probe.energy -= 4
         } else {
             game_push_message(game, "Unable to build collector, need 4 energy in probe!")
         }
     case .TURRET:
-        if game.probe.energy > 7 {
+        if game.probe.energy >= 7 {
             create_turret(game, pos + [2]int{1, 1}, focus)
             game.probe.energy -= 7
         } else {
