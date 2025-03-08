@@ -466,7 +466,7 @@ ai_random_move_take_turn :: proc(actor: ^NPCActor) -> Action {
 }
 
 ai_chaser_take_turn :: proc(actor: ^NPCActor) -> Action {
-    chaser := actor.target_ai.(ChaserAI)
+    chaser := &actor.target_ai.(ChaserAI)
 
     obj: [2]int
     wmap: ^Tilemap
@@ -482,6 +482,7 @@ ai_chaser_take_turn :: proc(actor: ^NPCActor) -> Action {
             chaser.turns_without_vision += 1
             if chaser.turns_without_vision >= chaser.max_turns_without_vision {
                 ai_deacquire_target(actor)
+                return no_action()
             }
         }
 
