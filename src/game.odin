@@ -463,6 +463,11 @@ game_draw_game :: proc(game: ^Game) {
     draw_world_tilemap(game.worldmap)
 
     rl.EndMode2D()
+
+    msize := [2]i32{i32(game.worldmap.width * 3), i32(game.worldmap.height * 3)}
+    off := [2]i32{i32(game_screen.width), i32(game_screen.height)} - msize
+    preview_wall(game.worldmap.walls[:], game.worldmap.width, off, rl.GRAY, game.hero.pos)
+
     if game.playing_subscale {
         rl.DrawRectangleRec(game_screen, rl.ColorAlpha(rl.GRAY, 0.3))
     }

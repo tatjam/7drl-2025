@@ -373,8 +373,16 @@ take_turn_hero :: proc(actor: ^HeroActor) -> Action {
     return no_action()
 }
 
+take_turn_ai_probe :: proc(actor: ^ProbeActor) -> Action {
+    // The probe AI is very stupid, it builds collectors
+    // at any point near a wire that's free and turrets
+    // near the collectors
+    return no_action()
+}
 
 take_turn_probe :: proc(actor: ^ProbeActor) -> Action {
+    if .HOSTILE in actor.class do return take_turn_ai_probe(actor)
+
     if rl.IsKeyPressed(.SPACE) {
         actor.in_game.playing_subscale = false
         return no_action()
