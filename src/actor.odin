@@ -122,6 +122,7 @@ Actor :: struct {
     actions_per_turn: int,
     actions_taken: int,
     swappable: bool,
+    killable: bool,
 
     impedes_movement: bool,
 
@@ -251,7 +252,22 @@ actor_get_draw_pos :: proc(actor: Actor) -> [2]f32 {
     return linalg.to_f32(actor.pos) + [2]f32{0.5, 0.5} + actor.doffset + extra
 }
 
-destroy_actor :: proc(actor: ^Actor) {
+destroy_actor :: proc(game: ^Game, actor: ^Actor) {
+    for i := 0; i < len(game.npcs); i+= 1{
+        if game.npcs[i] == actor {
+            unordered_remove(&game.npcs, i)
+        }
+    }
+    fscale, is_fscale := actor.scale_kind.(FullscaleActor)
+    if is_fscale {
+        for other_npc in game.npcs {
+            sscale, is_scale := other_npc.scale_kind.(SubscaleActor)
+            if !is_scale do continue
+            if sscale.subscale_of != actor do continue
+            destroy_actor(game, other_npc)
+        }
+    }
+
     destroy_subscale_map(actor)
     switch v in actor.kind {
         case ^NPCActor:
@@ -272,7 +288,7 @@ create_hero :: proc(game: ^Game, pos: [2]int) {
     out.health = 500
     out.in_game = game
     out.class = {.HERO, .FRIENDLY}
-    out.actions_per_turn = 1
+    out.actions_per_turn = 2
     out.pos = pos
     out.dir = .NORTH
     out.alive = true
@@ -298,6 +314,8 @@ create_hero :: proc(game: ^Game, pos: [2]int) {
 
 create_probe :: proc(game: ^Game, pos: [2]int, owner_cortex: ^OrganActor) {
     out := &game.probe
+    out.energy = 5
+    out.killable = true
     out.kind = &game.probe
     out.in_game = game
     out.class = {.HERO, .FRIENDLY}
@@ -310,7 +328,7 @@ create_probe :: proc(game: ^Game, pos: [2]int, owner_cortex: ^OrganActor) {
     out.sprite_size = [2]int{1, 1}
     out.actions_per_turn = SUBSCALE_ACTIONS_PER_TURN
 
-    out.max_energy = 5
+    out.max_energy = 15
 
     out.scale_kind = SubscaleActor{
         subscale_of = &game.hero
@@ -532,6 +550,7 @@ is_invader :: proc(inside: ^Actor, possible_invader: ^Actor) -> bool {
     sscale, is_subscale := possible_invader.scale_kind.(SubscaleActor)
     if !is_subscale do return false
     if sscale.subscale_of != inside do return false
+    if !possible_invader.killable do return false
 
     return true
 }
@@ -565,7 +584,7 @@ take_turn_organ :: proc(actor: ^OrganActor) -> Action {
             return no_action()
         }
     } else if actor.organ_kind == .FACTORY {
-        if actor.energy > 3 && any_invader_present(actor.scale_kind.(SubscaleActor).subscale_of){
+        if any_invader_present(actor.scale_kind.(SubscaleActor).subscale_of){
             return create_soliton_action(actor)
         }
     }
@@ -611,12 +630,38 @@ take_turn_turret :: proc(actor: ^TurretActor) -> Action {
             variant = rand.choice(possible[:]),
         }
 
+    } else if !actor.target_wires && actor.damage > 0 {
+        // Shoot at nearest actor
+        min_dist: f32 = 9999999.9
+        min_dist_actor: ^Actor = nil
 
+        p_us := linalg.to_f32(actor.pos)
 
-    } else if actor.target_wires && actor.damage < 0 {
+        for other_actor in actor.in_game.npcs {
+            subscale, is_subscale := other_actor.scale_kind.(SubscaleActor)
+            if !is_subscale do continue
+            if subscale.subscale_of != actor.scale_kind.(SubscaleActor).subscale_of do continue
+            if .FRIENDLY in actor.class {
+                if .HOSTILE not_in other_actor.class do continue
+            } else {
+                if .FRIENDLY not_in other_actor.class do continue
+            }
+            if !other_actor.killable do continue
+            if !other_actor.alive do continue
 
-    } else {
+            p_other := linalg.to_f32(other_actor.pos)
 
+            dist := linalg.distance(p_us, p_other)
+            if dist < min_dist {
+                min_dist = dist
+                min_dist_actor = other_actor
+            }
+
+        }
+
+        if min_dist_actor != nil && min_dist < actor.target_radius {
+            return turret_shoot_action(actor, min_dist_actor, actor.damage)
+        }
     }
 
     return no_action()
@@ -879,12 +924,23 @@ draw_actor :: proc(actor: ^Actor) {
 
 }
 
-create_turret :: proc(game: ^Game, pos: [2]int, inside: ^Actor) -> ^TurretActor {
+create_turret :: proc(game: ^Game, pos: [2]int, inside: ^Actor, for_probe: ^ProbeActor = nil) -> ^TurretActor {
     actor := game_create_npc(game, TurretActor)
-    actor.class = {.TURRET}
+    actor.probe = for_probe
+    if actor.probe == nil {
+        actor.probe = &game.probe
+    }
+    if .FRIENDLY in actor.probe.class {
+        actor.class = {.TURRET, .FRIENDLY}
+        actor.target_bitset = {.HOSTILE}
+    } else {
+        actor.class = {.TURRET, .HOSTILE}
+        actor.target_bitset = {.FRIENDLY}
+    }
+    actor.killable = true
     actor.actions_per_turn = 4
-    actor.target_bitset = {.HOSTILE}
     actor.damage = 1
+    actor.target_radius = 4.0
 
     actor.pos = pos
     actor.dir = .NORTH
@@ -903,6 +959,7 @@ create_turret :: proc(game: ^Game, pos: [2]int, inside: ^Actor) -> ^TurretActor 
 create_collector :: proc(game: ^Game, pos: [2]int, inside: ^Actor, for_probe: ^ProbeActor = nil) -> ^TurretActor {
     actor := game_create_npc(game, TurretActor)
     actor.class = {.TURRET}
+    actor.killable = true
     actor.actions_per_turn = 4
     actor.target_wires = true
     actor.target_radius = 4.0
@@ -1059,7 +1116,12 @@ create_melee_soliton :: proc(game: ^Game, pos: [2]int, inside: ^Actor, friend: b
     actor := game_create_npc(game, NPCActor)
     actor.class = {.FRIENDLY} if friend else {.HOSTILE}
 
+    actor.killable = true
+    actor.actions_per_turn = 8
+    actor.target_acquire_class = {.HOSTILE} if friend else {.FRIENDLY}
+
     actor.pos = pos
+    actor.health = 1
     actor.ignore_dir_graphics = true
     actor.dir = .NORTH
     actor.alive = true
@@ -1072,13 +1134,15 @@ create_melee_soliton :: proc(game: ^Game, pos: [2]int, inside: ^Actor, friend: b
 
     actor.scale_kind = SubscaleActor{subscale_of = inside}
 
+    actor.target_ai = ChaserAI{}
+
     return actor
 
 }
 
 create_sentinel :: proc(game: ^Game, pos: [2]int) -> ^Actor {
     actor := game_create_npc(game, NPCActor)
-    actor.actions_per_turn = 1
+    actor.actions_per_turn = 2
     actor.health = 150
     actor.class = {.HOSTILE}
     actor.swappable = true
@@ -1101,7 +1165,7 @@ create_sentinel :: proc(game: ^Game, pos: [2]int) -> ^Actor {
     create_subscale_map(actor, "res/agents/sentinel_interior.png", DungeonSettings{
         max_room_size = [2]int{3, 3},
         min_room_size = [2]int{2, 2},
-        num_rooms = 6,
+        num_rooms = 8,
     })
 
     fs.subscale.tex = render_subscale_tilemap(fs.subscale.tmap)
@@ -1109,12 +1173,47 @@ create_sentinel :: proc(game: ^Game, pos: [2]int) -> ^Actor {
     return actor
 }
 
+
+create_mechanic :: proc(game: ^Game, pos: [2]int) -> ^Actor {
+    actor := game_create_npc(game, NPCActor)
+    actor.actions_per_turn = 1
+    actor.health = 300
+    actor.class = {.HOSTILE}
+    actor.swappable = true
+    actor.impedes_movement = true
+    actor.pos = pos
+    actor.dir = .NORTH
+    actor.alive = true
+    actor.sprite = get_texture(&game.assets, "res/agents/mechanic.png")
+    actor.sprite_rect = rl.Rectangle{0, 0, f32(actor.sprite.width), f32(actor.sprite.height)}
+    actor.sprite_size = [2]int{1, 1}
+
+    actor.require_los = true
+    actor.target_ai = ChaserAI{max_turns_without_vision = 2, min_dist = 2.0}
+    actor.loiter_ai = RandomMoveAI{}
+    actor.target_acquire_class = {.HERO}
+
+    actor.scale_kind = FullscaleActor{}
+    fs := &actor.scale_kind.(FullscaleActor)
+
+    create_subscale_map(actor, "res/agents/mechanic_interior.png", DungeonSettings{
+        max_room_size = [2]int{3, 3},
+        min_room_size = [2]int{2, 2},
+        num_rooms = 8,
+    })
+
+    fs.subscale.tex = render_subscale_tilemap(fs.subscale.tmap)
+
+    return actor
+}
+
+
 create_factory :: proc(game: ^Game, pos: [2]int, inside: ^Actor, orient: c.int, friendly: bool) -> ^OrganActor {
     actor := game_create_npc(game, OrganActor)
     actor.class = {.ENVIRONMENT, .FRIENDLY} if friendly else {.ENVIRONMENT, .HOSTILE}
     actor.organ_kind = .FACTORY
 
-    actor.max_energy = 4
+    actor.max_energy = 12
     actor.actions_per_turn = 1
 
     actor.pos = pos

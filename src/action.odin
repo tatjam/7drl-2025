@@ -12,7 +12,7 @@ Action :: struct {
     force_animate: bool,
     variant: union{
         NoAction, MoveAction, TurnAction, ShootProbeAction, DummyAnimateAction,
-        ChargeSuckAction, CreateSolitonAction}
+        ChargeSuckAction, CreateSolitonAction, TurretShootAction}
 }
 
 MoveAction :: struct {
@@ -42,6 +42,11 @@ ChargeSuckAction :: struct {
     pos: [2]int,
     charge_index: int,
     to_probe: ^ProbeActor,
+}
+
+TurretShootAction :: struct {
+    target: ^Actor,
+    damage: int,
 }
 
 CreateSolitonAction :: struct {
@@ -94,6 +99,57 @@ dir_to_delta :: proc(dir: Direction) -> [2]int {
     return delta
 }
 
+turret_shoot_action :: proc(actor: ^Actor, target: ^Actor, damage: int) -> Action {
+    probe := actor.kind.(^TurretActor).probe
+    if probe.energy < 2 {
+        return no_action()
+    }
+
+    return Action {
+        by_actor = actor,
+        variant = TurretShootAction {
+            target=target,
+            damage=damage,
+        }
+    }
+}
+
+animate_turret_shoot_action :: proc(action: Action, prog: f32) -> f32 {
+    SHOOT_TIME :: 0.1
+    shoot := action.variant.(TurretShootAction)
+
+    game := action.by_actor.in_game
+
+    if len(game.fx) == 0 {
+        fx := new(ActionFX)
+        fx.in_subscale = action.by_actor.scale_kind.(SubscaleActor).subscale_of
+        fx.pos = linalg.to_f32(action.by_actor.pos)
+        fx.sprite_tex = get_texture(&game.assets, "res/charge.png")
+        fx.scale = 0.1
+        fx.tint = rl.WHITE
+        append(&game.fx, fx)
+    }
+    fx := game.fx[0]
+
+    delta := linalg.to_f32(shoot.target.pos - action.by_actor.pos)
+    fx.pos = linalg.to_f32(action.by_actor.pos) + delta * prog / SHOOT_TIME
+    fx.pos += [2]f32{0.5, 0.5}
+
+    return SHOOT_TIME
+}
+
+act_turret_shoot_action :: proc(action: Action) {
+    shoot := action.variant.(TurretShootAction)
+
+    shoot.target.health -= shoot.damage
+    if shoot.target.health <= 0 {
+        shoot.target.alive = false
+    }
+
+    probe := action.by_actor.kind.(^TurretActor).probe
+    probe.energy -= 2
+
+}
 
 // Clamps to prevent skipping walls
 move_action :: proc(actor: ^Actor, dir: Direction, steps: int) -> Action {
@@ -181,7 +237,7 @@ move_action :: proc(actor: ^Actor, dir: Direction, steps: int) -> Action {
 }
 
 create_soliton_action :: proc(actor: ^OrganActor) -> Action {
-    if actor.energy >= 3 do return Action{by_actor = actor, variant=CreateSolitonAction{}}
+    if actor.energy >= 12 do return Action{by_actor = actor, variant=CreateSolitonAction{}}
     return no_action()
 }
 
@@ -189,7 +245,7 @@ act_create_soliton_action :: proc(act: Action) {
     cms := act.variant.(CreateSolitonAction)
 
     actor := act.by_actor.kind.(^OrganActor)
-    actor.energy -= 3
+    actor.energy -= 12
     sscale := actor.scale_kind.(SubscaleActor)
     create_melee_soliton(actor.in_game, actor.pos, sscale.subscale_of, .FRIENDLY in actor.class)
 }
@@ -321,6 +377,8 @@ animate_action :: proc(action: Action, prog: f32) -> f32 {
     case CreateSolitonAction:
         // TODO
         return 0.0
+    case TurretShootAction:
+        return animate_turret_shoot_action(action, prog)
     case NoAction:
         assert(false)
         return 0.0
@@ -341,6 +399,8 @@ act_action :: proc(action: Action) {
         act_charge_suck_action(action)
     case CreateSolitonAction:
         act_create_soliton_action(action)
+    case TurretShootAction:
+        act_turret_shoot_action(action)
     case DummyAnimateAction:
     case NoAction:
     case:

@@ -101,10 +101,10 @@ create_game :: proc() -> (out: Game) {
 }
 
 destroy_game :: proc(game: ^Game) {
-    destroy_actor(&game.probe)
-    destroy_actor(&game.hero)
+    destroy_actor(game, &game.probe)
+    destroy_actor(game, &game.hero)
     for npc in game.npcs {
-        destroy_actor(npc)
+        destroy_actor(game, npc)
     }
     delete(game.statuslog)
     delete(game.npcs)
@@ -193,6 +193,7 @@ game_update_anim :: proc(game: ^Game) {
 
 game_update_turn_for :: proc(game: ^Game, actor: ^Actor, force_anim := false) -> bool {
     if actor.actions_taken >= actor.actions_per_turn do return false
+    if !actor.alive do return false
 
     action : Action
     switch v in actor.kind {
@@ -256,11 +257,6 @@ game_update_turn :: proc(game: ^Game) {
             act, is_ok := game.cur_action.(Action)
             assert(is_ok)
             no_act, is_none := act.variant.(NoAction)
-            if is_none && no_act.rest && !game.playing_subscale {
-                // Give some energy to probe, to prevent player from getting stuck
-                game.probe.energy += 1
-                game.probe.energy = min(game.probe.energy, game.probe.max_energy)
-            }
             if is_none && !no_act.rest do break // Continue processing user input
 
             game.turni += 1
@@ -274,6 +270,10 @@ game_update_turn :: proc(game: ^Game) {
                     game.turni = -1
                 } else {
                     // TURN IS DONE
+                    // Give some energy to probe, to prevent player from getting stuck
+                    game.probe.energy += 1
+                    game.probe.energy = min(game.probe.energy, game.probe.max_energy)
+
                     free_all(context.temp_allocator)
                     game.turni = -1
                     game.hero.actions_taken = 0
@@ -285,6 +285,13 @@ game_update_turn :: proc(game: ^Game) {
                     game.skip_further_anims = false
                     game.last_income = game.income
                     game.income = 0
+
+                    // Remove dead actors
+                    for npc in game.npcs {
+                        if npc.alive do continue
+
+                        destroy_actor(game, npc)
+                    }
 
                     break
                 }
@@ -354,9 +361,19 @@ game_build_building :: proc(game: ^Game) {
     pos := game.building_cursor + game.probe.pos
     switch game.building_selected {
     case .COLLECTOR:
-        create_collector(game, pos + [2]int{1, 1}, focus)
+        if game.probe.energy > 2 {
+            create_collector(game, pos + [2]int{1, 1}, focus)
+            game.probe.energy -= 2
+        } else {
+            game_push_message(game, "Unable to build collector, need 2 energy in probe!")
+        }
     case .TURRET:
-        create_turret(game, pos + [2]int{1, 1}, focus)
+        if game.probe.energy > 4 {
+            create_turret(game, pos + [2]int{1, 1}, focus)
+            game.probe.energy -= 4
+        } else {
+            game_push_message(game, "Unable to build turret, need 4 energy in probe!")
+        }
     }
 }
 
@@ -432,6 +449,7 @@ game_draw_game :: proc(game: ^Game) {
     world_tilemap_cast_shadows(game.worldmap, cam.target, game_screen, cam)
     draw_actor(&game.hero)
     for npc in game.npcs {
+        if !npc.alive do continue
         fullscale, is_fullscale := npc.scale_kind.(FullscaleActor)
         if is_fullscale {
             draw_actor(npc)
@@ -504,6 +522,7 @@ game_draw_subscale :: proc(game: ^Game) {
 
 
     for &actor in game.npcs {
+        if !actor.alive do continue
         subscale, is_subscale := actor.scale_kind.(SubscaleActor)
         if is_subscale && subscale.subscale_of == game.focus_subscale {
             draw_actor(actor)

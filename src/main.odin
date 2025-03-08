@@ -62,7 +62,7 @@ main :: proc() {
     for i := 0; i < 1; i += 1{
         spawnpos := tilemap_find_spawn_pos(&game, nil)
         spawnpos = game.hero.pos + [2]int{0, -1}
-        sentinel := create_sentinel(&game, spawnpos)
+        create_mechanic(&game, spawnpos)
     }
 
     for !rl.WindowShouldClose() {
