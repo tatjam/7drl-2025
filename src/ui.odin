@@ -128,7 +128,113 @@ helppanel_draw :: proc(game: ^Game, marginw: c.int, marginh: c.int) {
             rl.GetScreenHeight() - 2 * marginh,
             rl.WHITE)
 
+
+        h := f32(marginh + 10)
+        w := f32(marginw + 10)
+        rl.DrawTextEx(game.uifont, "Fullscale Controls", [2]f32{w, h}, f32(game.uifont.baseSize), 4, rl.WHITE)
+        h += SKIP
+        rl.DrawTextEx(game.uifont, " HJKL: Move", [2]f32{w, h}, f32(game.uifont.baseSize), 4, rl.WHITE)
+        h += SKIP
+        rl.DrawTextEx(game.uifont, " P: Shoot / return scale probe", [2]f32{w, h}, f32(game.uifont.baseSize), 4, rl.WHITE)
+        h += SKIP
+        rl.DrawTextEx(game.uifont, " Space: Switch to subscale view", [2]f32{w, h}, f32(game.uifont.baseSize), 4, rl.WHITE)
+
+        h += HUGE_SKIP
+        rl.DrawTextEx(game.uifont, "Subscale Controls", [2]f32{w, h}, f32(game.uifont.baseSize), 4, rl.WHITE)
+        h += SKIP
+        rl.DrawTextEx(game.uifont, " HJKL: Move", [2]f32{w, h}, f32(game.uifont.baseSize), 4, rl.WHITE)
+        h += SKIP
+        rl.DrawTextEx(game.uifont, " B: Build mode", [2]f32{w, h}, f32(game.uifont.baseSize), 4, rl.WHITE)
+        h += SKIP
+        rl.DrawTextEx(game.uifont, " Enter: Complete build", [2]f32{w, h}, f32(game.uifont.baseSize), 4, rl.WHITE)
+        h += SKIP
+
+
+        h += HUGE_SKIP
+        rl.DrawTextEx(game.uifont, "Enemy overview", [2]f32{w, h}, f32(game.uifont.baseSize), 4, rl.WHITE)
+        h += SKIP
+
+        en := get_texture(&game.assets, "res/agents/sentinel.png")
+        rl.DrawTextureEx(en, [2]f32{w, h}, 0.0, 2.0, rl.WHITE)
+        h += HUGE_SKIP * 3
+        rl.DrawTextEx(game.uifont, "Sentinel: Weak, unable to attack.", [2]f32{w, h}, f32(game.uifont.baseSize), 4, rl.WHITE)
+        h += SKIP
+        rl.DrawTextEx(game.uifont, "Bait and use to farm energy.", [2]f32{w, h}, f32(game.uifont.baseSize), 4, rl.WHITE)
+
+        h -= HUGE_SKIP * 3 + SKIP
+
+        w += 400.0
+        en = get_texture(&game.assets, "res/agents/mechanic.png")
+        rl.DrawTextureEx(en, [2]f32{w, h}, 0.0, 2.0, rl.WHITE)
+        h += HUGE_SKIP * 3
+        rl.DrawTextEx(game.uifont, "Mechanic: Touch, can attack.", [2]f32{w, h}, f32(game.uifont.baseSize), 4, rl.WHITE)
+        h += SKIP
+        rl.DrawTextEx(game.uifont, "Be careful, watch your interior as you attack!.", [2]f32{w, h}, f32(game.uifont.baseSize), 4, rl.WHITE)
+        w -= 400.0
+
+        h += HUGE_SKIP
+        rl.DrawTextEx(game.uifont, "Robot organ overview", [2]f32{w, h}, f32(game.uifont.baseSize), 4, rl.WHITE)
+        h += SKIP
+
+        en = get_texture(&game.assets, "res/agents/cortex.png")
+        rl.DrawTextureRec(en, rl.Rectangle{0.0, 0.0, 16.0 * 3, 16.0 * 3}, [2]f32{w, h}, rl.WHITE)
+        h += HUGE_SKIP * 2
+        rl.DrawTextEx(game.uifont, "Cortex", [2]f32{w, h}, f32(game.uifont.baseSize), 4, rl.WHITE)
+        h += SKIP
+        rl.DrawTextEx(game.uifont, "Energy source.", [2]f32{w, h}, f32(game.uifont.baseSize), 4, rl.WHITE)
+        h -= HUGE_SKIP * 2 + SKIP
+
+        w += 200.0
+        en = get_texture(&game.assets, "res/agents/engine.png")
+        rl.DrawTextureRec(en, rl.Rectangle{0.0, 0.0, 16.0 * 3, 16.0 * 2}, [2]f32{w, h}, rl.WHITE)
+        h += HUGE_SKIP * 2
+        rl.DrawTextEx(game.uifont, "Engine", [2]f32{w, h}, f32(game.uifont.baseSize), 4, rl.WHITE)
+        h += SKIP
+        rl.DrawTextEx(game.uifont, "Allows motion.", [2]f32{w, h}, f32(game.uifont.baseSize), 4, rl.WHITE)
+        h -= HUGE_SKIP * 2 + SKIP
+
+        w += 200.0
+        en = get_texture(&game.assets, "res/agents/radar.png")
+        rl.DrawTextureRec(en, rl.Rectangle{0.0, 0.0, 16.0 * 3, 16.0 * 2}, [2]f32{w, h}, rl.WHITE)
+        h += HUGE_SKIP * 2
+        rl.DrawTextEx(game.uifont, "Radar", [2]f32{w, h}, f32(game.uifont.baseSize), 4, rl.WHITE)
+        h += SKIP
+        rl.DrawTextEx(game.uifont, "Allows targetting.", [2]f32{w, h}, f32(game.uifont.baseSize), 4, rl.WHITE)
+        h -= HUGE_SKIP * 2 + SKIP
+
+        w += 200.0
+        en = get_texture(&game.assets, "res/agents/factory.png")
+        rl.DrawTextureRec(en, rl.Rectangle{0.0, 0.0, 16.0 * 3, 16.0 * 2}, [2]f32{w, h}, rl.WHITE)
+        h += HUGE_SKIP * 2
+        rl.DrawTextEx(game.uifont, "Factory", [2]f32{w, h}, f32(game.uifont.baseSize), 4, rl.WHITE)
+        h += SKIP
+        rl.DrawTextEx(game.uifont, "Makes solitons.", [2]f32{w, h}, f32(game.uifont.baseSize), 4, rl.WHITE)
+
+        w -= 600.0
+
+        h += HUGE_SKIP
+        rl.DrawTextEx(game.uifont, "Building overview", [2]f32{w, h}, f32(game.uifont.baseSize), 4, rl.WHITE)
+        h += SKIP
+
+        en = get_texture(&game.assets, "res/agents/energy_collector.png")
+        rl.DrawTextureRec(en, rl.Rectangle{0.0, 0.0, 16.0 * 2, 16.0 * 2}, [2]f32{w, h}, rl.WHITE)
+        w += 40.0
+        rl.DrawTextEx(game.uifont, "Collector", [2]f32{w, h}, f32(game.uifont.baseSize), 4, rl.WHITE)
+        h += SKIP
+        rl.DrawTextEx(game.uifont, "Transfers energy from subscale to probe.", [2]f32{w, h}, f32(game.uifont.baseSize), 4, rl.WHITE)
+        h += SKIP
+        rl.DrawTextEx(game.uifont, "Excess energy is transferred to owner's cortex (income)", [2]f32{w, h}, f32(game.uifont.baseSize), 4, rl.WHITE)
+        h += HUGE_SKIP
+        w -= 40.0
+        en = get_texture(&game.assets, "res/agents/turret.png")
+        rl.DrawTextureRec(en, rl.Rectangle{0.0, 0.0, 16.0 * 2, 16.0 * 2}, [2]f32{w, h}, rl.WHITE)
+        w += 40.0
+        rl.DrawTextEx(game.uifont, "Turret", [2]f32{w, h}, f32(game.uifont.baseSize), 4, rl.WHITE)
+        h += SKIP
+        rl.DrawTextEx(game.uifont, "Attacks enemy solitons.", [2]f32{w, h}, f32(game.uifont.baseSize), 4, rl.WHITE)
+
     }
+
 }
 
 ui_draw :: proc(game: ^Game) {
@@ -138,7 +244,7 @@ ui_draw :: proc(game: ^Game) {
     scalepanel_draw(game, c.int(GAME_PANEL_W * wf), c.int(hf))
     userpanel_draw(game, c.int(STATUS_PANEL_W * wf), c.int(GAME_PANEL_H * hf), c.int((GAME_PANEL_W) * wf))
     statuspanel_draw(game, c.int(GAME_PANEL_H * hf), c.int(STATUS_PANEL_W * wf))
-    helppanel_draw(game, c.int(0.2 * wf), c.int(0.2 * hf))
+    helppanel_draw(game, c.int(0.1 * wf), c.int(0.1 * hf))
 }
 
 ui_game_scissor :: proc() {

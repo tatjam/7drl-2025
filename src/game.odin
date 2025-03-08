@@ -361,18 +361,18 @@ game_build_building :: proc(game: ^Game) {
     pos := game.building_cursor + game.probe.pos
     switch game.building_selected {
     case .COLLECTOR:
-        if game.probe.energy > 2 {
-            create_collector(game, pos + [2]int{1, 1}, focus)
-            game.probe.energy -= 2
-        } else {
-            game_push_message(game, "Unable to build collector, need 2 energy in probe!")
-        }
-    case .TURRET:
         if game.probe.energy > 4 {
-            create_turret(game, pos + [2]int{1, 1}, focus)
+            create_collector(game, pos + [2]int{1, 1}, focus)
             game.probe.energy -= 4
         } else {
-            game_push_message(game, "Unable to build turret, need 4 energy in probe!")
+            game_push_message(game, "Unable to build collector, need 4 energy in probe!")
+        }
+    case .TURRET:
+        if game.probe.energy > 7 {
+            create_turret(game, pos + [2]int{1, 1}, focus)
+            game.probe.energy -= 7
+        } else {
+            game_push_message(game, "Unable to build turret, need 7 energy in probe!")
         }
     }
 }

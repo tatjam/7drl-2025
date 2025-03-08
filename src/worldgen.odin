@@ -310,15 +310,18 @@ wall_from_image :: proc(imagepath: string) -> (out: [dynamic]bool, width: int, t
 
 // FOR DEBUGGING ONLY
 preview_wall :: proc(wall: []bool, width: int, off: [2]c.int, tint: rl.Color, player_pos: [2]int) {
+    ALPHA :: 0.7
     for yi:=0; yi < len(wall) / width; yi+=1 {
         for xi:=0; xi < width; xi+=1 {
             for sxi := -1; sxi <= 1; sxi += 1 {
                 for syi := -1; syi <= 1; syi += 1 {
                     p := [2]int{xi, yi}
                     if player_pos == p {
-                        rl.DrawPixel(c.int(xi * 3 + sxi) + off.x, c.int(yi * 3 + syi) + off.y, rl.WHITE)
+                        rl.DrawPixel(c.int(xi * 3 + sxi) + off.x, c.int(yi * 3 + syi) + off.y, rl.ColorAlpha(rl.WHITE, ALPHA))
                     } else if wall[yi * width + xi] {
-                        rl.DrawPixel(c.int(xi * 3 + sxi) + off.x, c.int(yi * 3 + syi) + off.y, tint)
+                        rl.DrawPixel(c.int(xi * 3 + sxi) + off.x, c.int(yi * 3 + syi) + off.y, rl.ColorAlpha(tint, ALPHA))
+                    } else {
+                        rl.DrawPixel(c.int(xi * 3 + sxi) + off.x, c.int(yi * 3 + syi) + off.y, rl.ColorAlpha(rl.BLACK, ALPHA))
                     }
                 }
             }
